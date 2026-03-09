@@ -1,0 +1,17 @@
+server:
+  listen: ":8080"
+  dev_mode: true
+  dev_user: "tjstkm"
+  static_dir: "./frontend/dist"
+
+helper:
+  path: "./bin/fileshelf-helper"
+  timeout: 30s
+
+shares:
+  - name: "media"
+    path: "/tank/media"
+  - name: "documents"
+    path: "/tank/documents"
+  - name: "backups"
+    path: "/tank/backups"
