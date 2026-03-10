@@ -106,3 +106,10 @@ shares:
 - API responses: JSON, errors use `{"error": "message"}` with HTTP status codes
 - Commits: Conventional Commits format
 - Tests: table-driven tests preferred
+
+## サーバー起動
+
+- テストサーバーは `make serve` で起動すること。ポート番号を直接指定してはいけない。
+- サーバー起動スクリプトを作成・変更する場合は、portman ガイドを参照すること:
+  https://raw.githubusercontent.com/tjst-t/port-manager/main/docs/CLAUDE_INTEGRATION.md
+- .env ファイルを git commit してはいけない（.gitignore に追加すること）
