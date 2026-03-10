@@ -16,6 +16,7 @@ interface TreePaneProps {
   onDelete: () => void;
   onRename: (oldName: string, newName: string) => void;
   onSelectForTree: (path: string) => void;
+  onShowDropMenu: (paths: string[], destDir: string, x: number, y: number, sameDir: boolean) => void;
 }
 
 interface TreeNode {
@@ -38,6 +39,10 @@ function TreeItem({
   onNavigate,
   onToggle,
   onContextMenu,
+  onDrop,
+  dropTarget,
+  onDragOver,
+  onDragLeave,
   depth,
 }: {
   node: TreeNode;
@@ -45,9 +50,14 @@ function TreeItem({
   onNavigate: (path: string) => void;
   onToggle: (path: string) => void;
   onContextMenu: (e: React.MouseEvent, node: TreeNode) => void;
+  onDrop: (e: React.DragEvent, node: TreeNode) => void;
+  dropTarget: string | null;
+  onDragOver: (e: React.DragEvent, node: TreeNode) => void;
+  onDragLeave: (e: React.DragEvent) => void;
   depth: number;
 }) {
   const isActive = currentPath === node.path;
+  const isDropTarget = dropTarget === node.path;
 
   const hasChildren = node.children === null || (node.children && node.children.length > 0);
 
@@ -56,9 +66,11 @@ function TreeItem({
       <div
         data-tree-path={node.path}
         className={`flex items-center gap-1.5 cursor-pointer select-none text-[13px] transition-all duration-150 ${
-          isActive
-            ? "bg-accent/18 text-text border-r-2 border-accent"
-            : "text-text-muted border-r-2 border-transparent hover:bg-hover-row"
+          isDropTarget
+            ? "bg-accent/25 text-text border-r-2 border-accent"
+            : isActive
+              ? "bg-accent/18 text-text border-r-2 border-accent"
+              : "text-text-muted border-r-2 border-transparent hover:bg-hover-row"
         }`}
         style={{ paddingLeft: `${depth * 16 + 8}px`, paddingTop: 4, paddingBottom: 4, paddingRight: 8 }}
         onClick={() => {
@@ -66,6 +78,9 @@ function TreeItem({
           onToggle(node.path);
         }}
         onContextMenu={(e) => onContextMenu(e, node)}
+        onDragOver={(e) => onDragOver(e, node)}
+        onDragLeave={onDragLeave}
+        onDrop={(e) => onDrop(e, node)}
       >
         <span
           className="w-3.5 text-center text-text-dim flex-shrink-0 inline-block transition-transform duration-150"
@@ -94,6 +109,10 @@ function TreeItem({
               onNavigate={onNavigate}
               onToggle={onToggle}
               onContextMenu={onContextMenu}
+              onDrop={onDrop}
+              dropTarget={dropTarget}
+              onDragOver={onDragOver}
+              onDragLeave={onDragLeave}
               depth={depth + 1}
             />
           ))}
@@ -114,9 +133,11 @@ export default function TreePane({
   onDelete,
   onRename,
   onSelectForTree,
+  onShowDropMenu,
 }: TreePaneProps) {
   const [nodes, setNodes] = useState<TreeNode[]>([]);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
   const treeRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -315,6 +336,39 @@ export default function TreePane({
     []
   );
 
+  const handleTreeDragOver = useCallback((e: React.DragEvent, node: TreeNode) => {
+    if (!e.dataTransfer.types.includes("application/x-fileshelf")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "move";
+    setDropTarget(node.path);
+  }, []);
+
+  const handleTreeDragLeave = useCallback((e: React.DragEvent) => {
+    e.stopPropagation();
+    setDropTarget(null);
+  }, []);
+
+  const handleTreeDrop = useCallback(
+    (e: React.DragEvent, node: TreeNode) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setDropTarget(null);
+
+      const raw = e.dataTransfer.getData("application/x-fileshelf");
+      if (!raw) return;
+
+      const { paths, sourceDir } = JSON.parse(raw) as { paths: string[]; sourceDir: string };
+      const destDir = node.path;
+
+      // Don't drop a folder into itself
+      if (paths.some((p) => destDir.startsWith(p + "/") || destDir === p)) return;
+
+      onShowDropMenu(paths, destDir, e.clientX, e.clientY, sourceDir === destDir);
+    },
+    [onShowDropMenu]
+  );
+
   const handleContextMenu = useCallback(
     (e: React.MouseEvent, node: TreeNode) => {
       e.preventDefault();
@@ -435,6 +489,10 @@ export default function TreePane({
           onNavigate={onNavigate}
           onToggle={toggleNode}
           onContextMenu={handleContextMenu}
+          onDrop={handleTreeDrop}
+          dropTarget={dropTarget}
+          onDragOver={handleTreeDragOver}
+          onDragLeave={handleTreeDragLeave}
           depth={0}
         />
       ))}

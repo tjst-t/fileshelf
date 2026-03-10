@@ -5,6 +5,7 @@ import { formatSize } from "../utils/format";
 
 interface PreviewPaneProps {
   entry: FileEntry | null;
+  selectedEntries: FileEntry[];
   currentPath: string;
   onClose: () => void;
 }
@@ -58,7 +59,11 @@ function formatDateLong(iso: string): string {
   });
 }
 
-export default function PreviewPane({ entry, currentPath, onClose }: PreviewPaneProps) {
+export default function PreviewPane({ entry, selectedEntries, currentPath, onClose }: PreviewPaneProps) {
+  if (selectedEntries.length > 1) {
+    return <MultiPreview entries={selectedEntries} currentPath={currentPath} onClose={onClose} />;
+  }
+
   if (!entry) {
     return (
       <div className="h-full flex flex-col items-center justify-center text-text-dark text-[13px] bg-surface border-l border-border">
@@ -166,6 +171,73 @@ export default function PreviewPane({ entry, currentPath, onClose }: PreviewPane
           >
             📋 Copy path
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MultiPreview({ entries, currentPath, onClose }: { entries: FileEntry[]; currentPath: string; onClose: () => void }) {
+  const dirs = entries.filter(e => e.type === "dir");
+  const files = entries.filter(e => e.type === "file");
+  const totalSize = entries.reduce((sum, e) => sum + e.size, 0);
+  const paths = entries.map(e => currentPath + "/" + e.name);
+
+  return (
+    <div className="h-full flex flex-col bg-surface border-l border-border overflow-hidden">
+      {/* Header */}
+      <div className="px-3.5 py-3 border-b border-border flex items-center justify-between">
+        <span className="text-xs font-semibold text-text-muted uppercase tracking-[0.05em]">Preview</span>
+        <button
+          onClick={onClose}
+          className="text-text-dim hover:text-text cursor-pointer text-base leading-none px-1"
+        >
+          ×
+        </button>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 overflow-auto p-3.5">
+        {/* Summary */}
+        <div className="text-center pt-4 pb-5">
+          <div className="text-5xl mb-2">📑</div>
+          <div className="text-sm font-medium text-text">{entries.length} items selected</div>
+          <div className="text-xs text-text-muted mt-1">
+            {dirs.length > 0 && `${dirs.length} folder(s)`}
+            {dirs.length > 0 && files.length > 0 && ", "}
+            {files.length > 0 && `${files.length} file(s)`}
+          </div>
+        </div>
+
+        {/* Item list */}
+        <div className="mb-4">
+          {entries.map(e => (
+            <div key={e.name} className="flex items-center gap-2 py-1.5 border-b border-border/40 text-xs">
+              <span className="text-sm flex-shrink-0">{fileIcon(e.name, e.type)}</span>
+              <span className="truncate text-text-muted">{e.name}</span>
+              <span className="ml-auto text-text-faint font-mono text-[11px] flex-shrink-0">
+                {e.type === "dir" ? "\u2014" : formatSize(e.size)}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {/* Info */}
+        <div className="text-xs text-text-dim">
+          <div className="flex justify-between py-1.5 border-b border-border/60">
+            <span className="text-text-faint">Total size</span>
+            <span className="text-text-muted font-mono text-[11px]">{formatSize(totalSize)}</span>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="mt-4 flex flex-col gap-1.5">
+          <a
+            href={`/api/files/download-zip?paths=${encodeURIComponent(paths.join(","))}`}
+            className="block w-full text-center bg-accent/15 border border-accent/30 rounded-[5px] text-accent text-xs py-2 hover:bg-accent/25 no-underline"
+          >
+            ⬇ Download as zip
+          </a>
         </div>
       </div>
     </div>

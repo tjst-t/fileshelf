@@ -74,9 +74,37 @@ export function useFileExplorer() {
     navigate("/" + parts.join("/"));
   }, [currentPath, navigate]);
 
-  const refresh = useCallback(() => {
-    if (currentPath) navigate(currentPath);
-  }, [currentPath, navigate]);
+  const refresh = useCallback(async () => {
+    if (!currentPath) return;
+    setLoading(true);
+    setError(null);
+    setSelected(new Set());
+    try {
+      const data = await fetchFiles(currentPath);
+      setEntries(data);
+    } catch {
+      // Current folder may have been deleted; walk up to nearest existing parent
+      const parts = currentPath.split("/").filter(Boolean);
+      while (parts.length > 1) {
+        parts.pop();
+        try {
+          const data = await fetchFiles("/" + parts.join("/"));
+          setEntries(data);
+          setCurrentPath("/" + parts.join("/"));
+          showToast("Folder not found, moved to parent", "error");
+          setLoading(false);
+          return;
+        } catch {
+          continue;
+        }
+      }
+      setCurrentPath("");
+      setEntries([]);
+      showToast("Folder not found", "error");
+    } finally {
+      setLoading(false);
+    }
+  }, [currentPath, showToast]);
 
   const toggleSelect = useCallback((name: string, multi: boolean) => {
     setSelected((prev) => {
@@ -112,6 +140,10 @@ export function useFileExplorer() {
 
   const clearSelection = useCallback(() => {
     setSelected(new Set());
+  }, []);
+
+  const setSelectedSet = useCallback((names: Set<string>) => {
+    setSelected(names);
   }, []);
 
   const clearClipboard = useCallback(() => {
@@ -218,6 +250,38 @@ export function useFileExplorer() {
     [currentPath, refresh, showToast]
   );
 
+  const handleMoveTo = useCallback(
+    async (srcPaths: string[], destDir: string) => {
+      try {
+        for (const src of srcPaths) {
+          const name = src.split("/").pop()!;
+          await renameFile(src, destDir + "/" + name);
+        }
+        showToast(`${srcPaths.length} item(s) moved`);
+        refresh();
+      } catch (e) {
+        showToast((e as Error).message, "error");
+      }
+    },
+    [refresh, showToast]
+  );
+
+  const handleCopyTo = useCallback(
+    async (srcPaths: string[], destDir: string) => {
+      try {
+        for (const src of srcPaths) {
+          const name = src.split("/").pop()!;
+          await copyFile(src, destDir + "/" + name);
+        }
+        showToast(`${srcPaths.length} item(s) copied`);
+        refresh();
+      } catch (e) {
+        showToast((e as Error).message, "error");
+      }
+    },
+    [refresh, showToast]
+  );
+
   useEffect(() => {
     loadShares();
   }, [loadShares]);
@@ -238,6 +302,7 @@ export function useFileExplorer() {
     selectRange,
     selectAll,
     clearSelection,
+    setSelectedSet,
     handleCopy,
     handleCut,
     handlePaste,
@@ -245,6 +310,8 @@ export function useFileExplorer() {
     handleMkdir,
     handleRename,
     handleUpload,
+    handleMoveTo,
+    handleCopyTo,
     clearClipboard,
   };
 }

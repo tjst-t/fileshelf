@@ -4,9 +4,10 @@ import { formatSize } from "../utils/format";
 interface StatusBarProps {
   entries: FileEntry[];
   selected: Set<string>;
+  version: string;
 }
 
-export default function StatusBar({ entries, selected }: StatusBarProps) {
+export default function StatusBar({ entries, selected, version }: StatusBarProps) {
   const dirs = entries.filter((e) => e.type === "dir").length;
   const files = entries.length - dirs;
   const totalSize = entries.reduce((sum, e) => sum + (e.type === "file" ? e.size : 0), 0);
@@ -21,9 +22,14 @@ export default function StatusBar({ entries, selected }: StatusBarProps) {
           ? `${selected.size} selected`
           : `${entries.length} items (${dirs} dirs, ${files} files)`}
       </span>
-      <span>
-        {formatSize(selected.size > 0 ? selectedSize : totalSize)}
-      </span>
+      <div className="flex items-center gap-3">
+        <span>
+          {formatSize(selected.size > 0 ? selectedSize : totalSize)}
+        </span>
+        {version && (
+          <span className="text-text-faint/60">{version}</span>
+        )}
+      </div>
     </div>
   );
 }

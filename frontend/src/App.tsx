@@ -13,6 +13,7 @@ import ClipboardBar from "./components/ClipboardBar";
 import Toast from "./components/Toast";
 import DeleteDialog from "./components/DeleteDialog";
 import ResizeHandle from "./components/ResizeHandle";
+import ContextMenu from "./components/ContextMenu";
 
 export default function App() {
   const { theme, toggleTheme } = useTheme();
@@ -28,10 +29,12 @@ export default function App() {
     toast,
     navigate,
     goUp,
+    refresh,
     toggleSelect,
     selectRange,
     selectAll,
     clearSelection,
+    setSelectedSet,
     handleCopy,
     handleCut,
     handlePaste,
@@ -39,6 +42,8 @@ export default function App() {
     handleMkdir,
     handleRename,
     handleUpload,
+    handleMoveTo,
+    handleCopyTo,
     clearClipboard,
   } = useFileExplorer();
 
@@ -54,6 +59,18 @@ export default function App() {
   const [treePaneWidth, setTreePaneWidth] = useState(240);
   const [previewPaneWidth, setPreviewPaneWidth] = useState(320);
   const [globalDragOver, setGlobalDragOver] = useState(false);
+
+  // Drop menu state (shown after left-click DnD drop on a folder)
+  const [dropMenu, setDropMenu] = useState<{
+    x: number; y: number; paths: string[]; destDir: string; sameDir: boolean;
+  } | null>(null);
+
+  const handleShowDropMenu = useCallback(
+    (paths: string[], destDir: string, x: number, y: number, sameDir: boolean) => {
+      setDropMenu({ x, y, paths, destDir, sameDir });
+    },
+    []
+  );
 
   // When right-clicking a folder in the tree, navigate to its parent and select the folder
   const handleSelectForTree = useCallback(
@@ -90,6 +107,7 @@ export default function App() {
   const handleGlobalDragOver = useCallback(
     (e: React.DragEvent) => {
       if (!currentPath) return;
+      if (e.dataTransfer.types.includes("application/x-fileshelf")) return;
       e.preventDefault();
       setGlobalDragOver(true);
     },
@@ -97,7 +115,6 @@ export default function App() {
   );
 
   const handleGlobalDragLeave = useCallback((e: React.DragEvent) => {
-    // Only hide overlay when leaving the root element
     if (e.currentTarget === e.target || !e.currentTarget.contains(e.relatedTarget as Node)) {
       setGlobalDragOver(false);
     }
@@ -105,6 +122,7 @@ export default function App() {
 
   const handleGlobalDrop = useCallback(
     (e: React.DragEvent) => {
+      if (e.dataTransfer.types.includes("application/x-fileshelf")) return;
       e.preventDefault();
       setGlobalDragOver(false);
       if (!currentPath) return;
@@ -118,7 +136,6 @@ export default function App() {
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      // Don't intercept when typing in an input
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA") return;
 
@@ -144,6 +161,9 @@ export default function App() {
       } else if (e.key === "Escape") {
         clearSelection();
         setShowDeleteDialog(false);
+      } else if (e.key === "F5" || (mod && e.key === "r")) {
+        e.preventDefault();
+        refresh();
       } else if (e.key === " ") {
         e.preventDefault();
         setShowPreview((p) => !p);
@@ -152,7 +172,7 @@ export default function App() {
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [handleCopy, handleCut, handlePaste, selectAll, clearSelection, selected, showDeleteDialog]);
+  }, [handleCopy, handleCut, handlePaste, selectAll, clearSelection, selected, showDeleteDialog, refresh]);
 
   // Update preview when selection changes
   useEffect(() => {
@@ -162,6 +182,9 @@ export default function App() {
       if (entry) setPreviewEntry(entry);
     }
   }, [selected, entries]);
+
+  // Compute selected entries for preview
+  const selectedEntries = entries.filter((e) => selected.has(e.name));
 
   return (
     <div
@@ -191,6 +214,7 @@ export default function App() {
         currentPath={currentPath}
         onNavigate={navigate}
         onGoUp={goUp}
+        onRefresh={refresh}
         onNewFolder={handleMkdir}
         onUpload={handleUpload}
         showPreview={showPreview}
@@ -221,6 +245,7 @@ export default function App() {
             onDelete={() => setShowDeleteDialog(true)}
             onRename={handleRename}
             onSelectForTree={handleSelectForTree}
+            onShowDropMenu={handleShowDropMenu}
           />
         </div>
 
@@ -240,6 +265,7 @@ export default function App() {
               onNavigate={navigate}
               onSelect={toggleSelect}
               onSelectRange={selectRange}
+              onSetSelected={setSelectedSet}
               onPreview={handlePreview}
               onRename={handleRename}
               onDrop={handleUpload}
@@ -247,6 +273,7 @@ export default function App() {
               onCut={handleCut}
               onPaste={handlePaste}
               onDelete={() => setShowDeleteDialog(true)}
+              onShowDropMenu={handleShowDropMenu}
             />
           )}
         </div>
@@ -258,6 +285,7 @@ export default function App() {
             <div className="flex-shrink-0" style={{ width: previewPaneWidth }}>
               <PreviewPane
                 entry={previewEntry}
+                selectedEntries={selectedEntries}
                 currentPath={currentPath}
                 onClose={() => setShowPreview(false)}
               />
@@ -267,7 +295,7 @@ export default function App() {
       </div>
 
       {/* Status bar */}
-      <StatusBar entries={entries} selected={selected} />
+      <StatusBar entries={entries} selected={selected} version={version} />
 
       {/* Toast */}
       {toast && <Toast message={toast.message} type={toast.type} />}
@@ -281,6 +309,34 @@ export default function App() {
             setShowDeleteDialog(false);
           }}
           onCancel={() => setShowDeleteDialog(false)}
+        />
+      )}
+
+      {/* Right-drag drop menu */}
+      {dropMenu && (
+        <ContextMenu
+          x={dropMenu.x}
+          y={dropMenu.y}
+          items={[
+            {
+              icon: "\u{1F4C1}",
+              label: "Move here",
+              action: () => handleMoveTo(dropMenu.paths, dropMenu.destDir),
+              disabled: dropMenu.sameDir,
+            },
+            {
+              icon: "\u{1F4CB}",
+              label: "Copy here",
+              action: () => handleCopyTo(dropMenu.paths, dropMenu.destDir),
+            },
+            { icon: "", label: "", action: () => {}, divider: true },
+            {
+              icon: "\u2715",
+              label: "Cancel",
+              action: () => {},
+            },
+          ]}
+          onClose={() => setDropMenu(null)}
         />
       )}
     </div>

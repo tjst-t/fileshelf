@@ -15,6 +15,7 @@ interface FileListPaneProps {
   onNavigate: (path: string) => void;
   onSelect: (name: string, multi: boolean) => void;
   onSelectRange: (name: string) => void;
+  onSetSelected: (names: Set<string>) => void;
   onPreview: (entry: FileEntry) => void;
   onRename: (oldName: string, newName: string) => void;
   onDrop: (files: FileList) => void;
@@ -22,6 +23,7 @@ interface FileListPaneProps {
   onCut: () => void;
   onPaste: () => void;
   onDelete: () => void;
+  onShowDropMenu: (paths: string[], destDir: string, x: number, y: number, sameDir: boolean) => void;
 }
 
 type SortKey = "name" | "size" | "modified" | "perms";
@@ -62,6 +64,7 @@ export default function FileListPane({
   onNavigate,
   onSelect,
   onSelectRange,
+  onSetSelected,
   onPreview,
   onRename,
   onDrop,
@@ -69,6 +72,7 @@ export default function FileListPane({
   onCut,
   onPaste,
   onDelete,
+  onShowDropMenu,
 }: FileListPaneProps) {
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
@@ -76,6 +80,12 @@ export default function FileListPane({
   const [editValue, setEditValue] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
+  const [dropTargetName, setDropTargetName] = useState<string | null>(null);
+
+  // Lasso (rubber-band) selection state
+  const [lasso, setLasso] = useState<{ startX: number; startY: number; endX: number; endY: number } | null>(null);
+  const lassoActiveRef = useRef(false);
+  const tableContainerRef = useRef<HTMLDivElement>(null);
 
   const handleSort = useCallback(
     (key: SortKey) => {
@@ -145,8 +155,109 @@ export default function FileListPane({
     setEditName(null);
   };
 
+  // --- Left-click DnD (file move/copy via HTML5 DnD) ---
+
+  const handleDragStart = (e: React.DragEvent, entry: FileEntry) => {
+    const draggedNames = selected.has(entry.name)
+      ? Array.from(selected)
+      : [entry.name];
+    const paths = draggedNames.map((n) => currentPath + "/" + n);
+    e.dataTransfer.setData("application/x-fileshelf", JSON.stringify({ paths, sourceDir: currentPath }));
+    e.dataTransfer.effectAllowed = "copyMove";
+  };
+
+  const handleRowDragOver = (e: React.DragEvent, entry: FileEntry) => {
+    if (entry.type !== "dir") return;
+    if (!e.dataTransfer.types.includes("application/x-fileshelf")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "move";
+    setDropTargetName(entry.name);
+  };
+
+  const handleRowDragLeave = (e: React.DragEvent) => {
+    e.stopPropagation();
+    setDropTargetName(null);
+  };
+
+  const handleRowDrop = (e: React.DragEvent, entry: FileEntry) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDropTargetName(null);
+    if (entry.type !== "dir") return;
+
+    const raw = e.dataTransfer.getData("application/x-fileshelf");
+    if (!raw) return;
+
+    const { paths, sourceDir } = JSON.parse(raw) as { paths: string[]; sourceDir: string };
+    const destDir = currentPath + "/" + entry.name;
+
+    // Don't drop a folder into itself
+    if (paths.some((p) => destDir.startsWith(p + "/") || destDir === p)) return;
+
+    onShowDropMenu(paths, destDir, e.clientX, e.clientY, sourceDir === destDir);
+  };
+
+  // --- Lasso (rubber-band) selection ---
+
+  const handleLassoMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    if (target.closest("tr[data-row-name]")) return;
+    if (target.closest("thead")) return;
+
+    setLasso({ startX: e.clientX, startY: e.clientY, endX: e.clientX, endY: e.clientY });
+    lassoActiveRef.current = true;
+    e.preventDefault();
+  };
+
+  // Document-level mousemove/mouseup for lasso
+  useEffect(() => {
+    if (!lasso) return;
+
+    const handleMove = (e: MouseEvent) => {
+      setLasso((prev) => prev ? { ...prev, endX: e.clientX, endY: e.clientY } : null);
+    };
+
+    const handleUp = () => {
+      setLasso(null);
+      setTimeout(() => { lassoActiveRef.current = false; }, 0);
+    };
+
+    document.addEventListener("mousemove", handleMove);
+    document.addEventListener("mouseup", handleUp);
+    return () => {
+      document.removeEventListener("mousemove", handleMove);
+      document.removeEventListener("mouseup", handleUp);
+    };
+  }, [lasso !== null]);
+
+  // Update selection based on lasso rectangle
+  useEffect(() => {
+    if (!lasso || !tableContainerRef.current) return;
+
+    const lassoRect = {
+      left: Math.min(lasso.startX, lasso.endX),
+      right: Math.max(lasso.startX, lasso.endX),
+      top: Math.min(lasso.startY, lasso.endY),
+      bottom: Math.max(lasso.startY, lasso.endY),
+    };
+
+    const rows = tableContainerRef.current.querySelectorAll("tr[data-row-name]");
+    const names = new Set<string>();
+    rows.forEach((row) => {
+      const rect = row.getBoundingClientRect();
+      if (rect.bottom >= lassoRect.top && rect.top <= lassoRect.bottom &&
+          rect.right >= lassoRect.left && rect.left <= lassoRect.right) {
+        names.add(row.getAttribute("data-row-name")!);
+      }
+    });
+    onSetSelected(names);
+  }, [lasso, onSetSelected]);
+
+  // --- Context menus ---
+
   const handleBackgroundContextMenu = (e: React.MouseEvent) => {
-    // Only trigger if clicking the actual background, not a file row
     if (e.target !== e.currentTarget) return;
     e.preventDefault();
 
@@ -269,6 +380,12 @@ export default function FileListPane({
     <div
       className="h-full flex flex-col overflow-hidden relative"
       onDragOver={(e) => {
+        if (e.dataTransfer.types.includes("application/x-fileshelf")) {
+          // Internal drag: allow drop on background (same directory)
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
         e.preventDefault();
         e.stopPropagation();
         setDragOver(true);
@@ -278,6 +395,16 @@ export default function FileListPane({
         setDragOver(false);
       }}
       onDrop={(e) => {
+        if (e.dataTransfer.types.includes("application/x-fileshelf")) {
+          // Internal drag dropped on background = same directory
+          e.preventDefault();
+          e.stopPropagation();
+          const raw = e.dataTransfer.getData("application/x-fileshelf");
+          if (!raw) return;
+          const { paths, sourceDir } = JSON.parse(raw) as { paths: string[]; sourceDir: string };
+          onShowDropMenu(paths, currentPath, e.clientX, e.clientY, sourceDir === currentPath);
+          return;
+        }
         e.preventDefault();
         e.stopPropagation();
         setDragOver(false);
@@ -286,15 +413,33 @@ export default function FileListPane({
         }
       }}
     >
-      {/* Drag overlay */}
+      {/* Upload drag overlay */}
       {dragOver && (
         <div className="absolute inset-2 bg-accent/8 border-2 border-dashed border-accent rounded-lg z-10 flex items-center justify-center text-base text-accent font-medium pointer-events-none">
           Drop files to upload
         </div>
       )}
 
+      {/* Lasso selection rectangle */}
+      {lasso && (
+        <div
+          className="fixed border border-accent/60 bg-accent/10 pointer-events-none z-20 rounded-sm"
+          style={{
+            left: Math.min(lasso.startX, lasso.endX),
+            top: Math.min(lasso.startY, lasso.endY),
+            width: Math.abs(lasso.endX - lasso.startX),
+            height: Math.abs(lasso.endY - lasso.startY),
+          }}
+        />
+      )}
+
       {/* Table */}
-      <div className="flex-1 overflow-auto" onContextMenu={handleBackgroundContextMenu}>
+      <div
+        ref={tableContainerRef}
+        className="flex-1 overflow-auto"
+        onContextMenu={handleBackgroundContextMenu}
+        onMouseDown={handleLassoMouseDown}
+      >
         <table className="w-full border-collapse table-fixed select-none">
           <thead className="sticky top-0 bg-surface-alt z-[2]">
             <tr>
@@ -329,14 +474,25 @@ export default function FileListPane({
               sorted.map((entry) => {
                 const isSelected = selected.has(entry.name);
                 const isCut = clipboard?.mode === "cut" && clipboard.entries.some((e) => e.name === entry.name);
+                const isDropHighlight = dropTargetName === entry.name;
                 return (
                   <tr
                     key={entry.name}
+                    data-row-name={entry.name}
+                    data-drop-target={entry.type === "dir" ? currentPath + "/" + entry.name : undefined}
                     className={`cursor-pointer transition-colors duration-100 border-b border-border/50 ${
-                      isSelected ? "bg-accent/12" : "hover:bg-hover-row"
+                      isDropHighlight
+                        ? "bg-accent/25 outline outline-2 outline-accent/50 -outline-offset-2"
+                        : isSelected ? "bg-accent/12" : "hover:bg-hover-row"
                     }`}
                     style={{ opacity: isCut ? 0.4 : 1 }}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, entry)}
+                    onDragOver={(e) => handleRowDragOver(e, entry)}
+                    onDragLeave={handleRowDragLeave}
+                    onDrop={(e) => handleRowDrop(e, entry)}
                     onClick={(e) => {
+                      if (lassoActiveRef.current) return;
                       if (e.shiftKey) {
                         onSelectRange(entry.name);
                       } else {

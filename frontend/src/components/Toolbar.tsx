@@ -5,6 +5,7 @@ interface ToolbarProps {
   currentPath: string;
   onNavigate: (path: string) => void;
   onGoUp: () => void;
+  onRefresh: () => void;
   onNewFolder: (name: string) => void;
   onUpload: (files: FileList) => void;
   showPreview: boolean;
@@ -15,6 +16,7 @@ export default function Toolbar({
   currentPath,
   onNavigate,
   onGoUp,
+  onRefresh,
   onNewFolder,
   onUpload,
   showPreview,
@@ -44,6 +46,15 @@ export default function Toolbar({
         title="Go up"
       >
         ←
+      </button>
+
+      <button
+        className={`${btnBase} text-text-muted hover:text-text hover:bg-surface-raised disabled:opacity-30 disabled:cursor-default text-sm`}
+        onClick={onRefresh}
+        disabled={!currentPath}
+        title="Refresh"
+      >
+        ↻
       </button>
 
       <div className="flex-1 min-w-0">
