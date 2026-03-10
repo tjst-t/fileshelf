@@ -1,10 +1,11 @@
 interface TitleBarProps {
   username: string;
+  version: string;
   theme: "dark" | "light";
   onToggleTheme: () => void;
 }
 
-export default function TitleBar({ username, theme, onToggleTheme }: TitleBarProps) {
+export default function TitleBar({ username, version, theme, onToggleTheme }: TitleBarProps) {
   const initial = username ? username[0].toUpperCase() : "?";
 
   return (
@@ -12,7 +13,7 @@ export default function TitleBar({ username, theme, onToggleTheme }: TitleBarPro
       <div className="flex items-center gap-2.5">
         <span className="text-lg">📚</span>
         <span className="font-mono font-semibold text-[15px] text-text tracking-tight">fileshelf</span>
-        <span className="text-[11px] text-text-faint font-mono ml-1">v0.1.0</span>
+        <span className="text-[11px] text-text-faint font-mono ml-1">{version}</span>
       </div>
       <div className="flex items-center gap-3">
         <button

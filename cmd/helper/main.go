@@ -8,9 +8,11 @@ import (
 	"strings"
 
 	"github.com/tjst-t/fileshelf/internal/helper"
+	"github.com/tjst-t/fileshelf/internal/version"
 )
 
 func main() {
+	showVersion := flag.Bool("version", false, "print version and exit")
 	op := flag.String("op", "", "operation: access|list|read|write|mkdir|delete|rename|copy|stat")
 	uid := flag.Int("uid", -1, "target user uid")
 	gid := flag.Int("gid", -1, "target user gid")
@@ -25,6 +27,11 @@ func main() {
 	}
 
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println("fileshelf-helper " + version.String())
+		os.Exit(0)
+	}
 
 	// Validate required flags
 	var missing []string

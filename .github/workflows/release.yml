@@ -12,6 +12,12 @@ jobs:
   build:
     name: Build Release Binaries
     runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ github.ref_name }}
+      COMMIT: ${{ github.sha }}
+      LDFLAGS: >-
+        -X github.com/tjst-t/fileshelf/internal/version.Version=${{ github.ref_name }}
+        -X github.com/tjst-t/fileshelf/internal/version.Commit=${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
 
@@ -33,25 +39,25 @@ jobs:
         env:
           GOOS: linux
           GOARCH: amd64
-        run: go build -o bin/fileshelf-server-linux-amd64 ./cmd/server
+        run: go build -ldflags "$LDFLAGS" -o bin/fileshelf-server-linux-amd64 ./cmd/server
 
       - name: Build helper (linux/amd64)
         env:
           GOOS: linux
           GOARCH: amd64
-        run: go build -o bin/fileshelf-helper-linux-amd64 ./cmd/helper
+        run: go build -ldflags "$LDFLAGS" -o bin/fileshelf-helper-linux-amd64 ./cmd/helper
 
       - name: Build server (linux/arm64)
         env:
           GOOS: linux
           GOARCH: arm64
-        run: go build -o bin/fileshelf-server-linux-arm64 ./cmd/server
+        run: go build -ldflags "$LDFLAGS" -o bin/fileshelf-server-linux-arm64 ./cmd/server
 
       - name: Build helper (linux/arm64)
         env:
           GOOS: linux
           GOARCH: arm64
-        run: go build -o bin/fileshelf-helper-linux-arm64 ./cmd/helper
+        run: go build -ldflags "$LDFLAGS" -o bin/fileshelf-helper-linux-arm64 ./cmd/helper
 
       - name: Package release
         run: |
@@ -64,6 +70,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          generate_release_notes: true
           files: |
             release/fileshelf-${{ github.ref_name }}-linux-amd64.tar.gz
             release/fileshelf-${{ github.ref_name }}-linux-arm64.tar.gz

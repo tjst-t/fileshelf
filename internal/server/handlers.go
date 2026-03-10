@@ -12,12 +12,21 @@ import (
 
 	"github.com/tjst-t/fileshelf/internal/config"
 	"github.com/tjst-t/fileshelf/internal/fileop"
+	"github.com/tjst-t/fileshelf/internal/version"
 )
 
 // Handlers holds dependencies for HTTP handlers.
 type Handlers struct {
 	FileOp fileop.FileOperator
 	Config *config.Config
+}
+
+// HandleVersion returns the server version.
+func (h *Handlers) HandleVersion(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, map[string]string{
+		"version": version.Version,
+		"commit":  version.Commit,
+	})
 }
 
 // HandleShares returns the list of shares accessible by the current user.

@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import type { FileEntry } from "./api/client";
+import { fetchVersion } from "./api/client";
 import { useFileExplorer } from "./hooks/useFileExplorer";
 import { useTheme } from "./hooks/useTheme";
 import TitleBar from "./components/TitleBar";
@@ -40,6 +41,12 @@ export default function App() {
     handleUpload,
     clearClipboard,
   } = useFileExplorer();
+
+  const [version, setVersion] = useState("");
+
+  useEffect(() => {
+    fetchVersion().then((v) => setVersion(v.version)).catch(() => {});
+  }, []);
 
   const [showPreview, setShowPreview] = useState(false);
   const [previewEntry, setPreviewEntry] = useState<FileEntry | null>(null);
@@ -177,7 +184,7 @@ export default function App() {
       )}
 
       {/* Title bar */}
-      <TitleBar username="tjstkm" theme={theme} onToggleTheme={toggleTheme} />
+      <TitleBar username="tjstkm" version={version} theme={theme} onToggleTheme={toggleTheme} />
 
       {/* Toolbar */}
       <Toolbar

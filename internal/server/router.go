@@ -29,6 +29,9 @@ func NewRouter(cfg *config.Config, fop fileop.FileOperator) http.Handler {
 		}
 	}
 
+	// Version endpoint (no auth required)
+	mux.HandleFunc("GET /api/version", h.HandleVersion)
+
 	// API routes
 	apiMux := http.NewServeMux()
 	apiMux.HandleFunc("GET /api/shares", h.HandleShares)

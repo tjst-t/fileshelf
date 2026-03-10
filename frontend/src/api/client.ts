@@ -1,3 +1,13 @@
+export interface VersionInfo {
+  version: string;
+  commit: string;
+}
+
+export async function fetchVersion(): Promise<VersionInfo> {
+  const res = await fetch("/api/version");
+  return handleResponse<VersionInfo>(res);
+}
+
 export interface Share {
   name: string;
   path: string;

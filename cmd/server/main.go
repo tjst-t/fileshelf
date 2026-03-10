@@ -14,12 +14,19 @@ import (
 	"github.com/tjst-t/fileshelf/internal/config"
 	"github.com/tjst-t/fileshelf/internal/fileop"
 	"github.com/tjst-t/fileshelf/internal/server"
+	"github.com/tjst-t/fileshelf/internal/version"
 )
 
 func main() {
 	configPath := flag.String("config", "config.yaml", "path to config file")
 	port := flag.Int("port", 0, "override listen port (e.g. 8080)")
+	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println("fileshelf-server " + version.String())
+		os.Exit(0)
+	}
 
 	cfg, err := config.Load(*configPath)
 	if err != nil {
@@ -60,7 +67,7 @@ func main() {
 		if cfg.Server.DevMode {
 			mode = "dev (user: " + cfg.Server.DevUser + ")"
 		}
-		log.Printf("fileshelf-server starting on %s [%s]", cfg.Server.Listen, mode)
+		log.Printf("fileshelf-server %s starting on %s [%s]", version.String(), cfg.Server.Listen, mode)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("server error: %v", err)
 		}

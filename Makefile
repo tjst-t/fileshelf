@@ -3,13 +3,18 @@
 BIN_DIR := bin
 FRONTEND_DIR := frontend
 
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+COMMIT  ?= $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
+LDFLAGS := -X github.com/tjst-t/fileshelf/internal/version.Version=$(VERSION) \
+           -X github.com/tjst-t/fileshelf/internal/version.Commit=$(COMMIT)
+
 build: build-server build-helper build-frontend
 
 build-server:
-	go build -o $(BIN_DIR)/fileshelf-server ./cmd/server
+	go build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/fileshelf-server ./cmd/server
 
 build-helper:
-	go build -o $(BIN_DIR)/fileshelf-helper ./cmd/helper
+	go build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/fileshelf-helper ./cmd/helper
 
 build-frontend:
 	cd $(FRONTEND_DIR) && npm ci && npm run build
