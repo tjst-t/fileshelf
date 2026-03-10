@@ -1,7 +1,9 @@
 package server
 
 import (
+	"archive/zip"
 	"encoding/json"
+	"fmt"
 	"io"
 	"mime"
 	"net/http"
@@ -302,6 +304,117 @@ func (h *Handlers) HandleFilesCopy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, map[string]bool{"ok": true})
+}
+
+// HandleFilesDownloadZip streams a zip archive containing the requested files/directories.
+func (h *Handlers) HandleFilesDownloadZip(w http.ResponseWriter, r *http.Request) {
+	user := UserFromContext(r.Context())
+	if user == nil {
+		writeJSONError(w, "not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	pathsParam := r.URL.Query().Get("paths")
+	if pathsParam == "" {
+		writeJSONError(w, "paths parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	paths := strings.Split(pathsParam, ",")
+	if len(paths) == 0 {
+		writeJSONError(w, "paths parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	// Determine zip filename
+	zipName := "download.zip"
+	if len(paths) == 1 {
+		base := filepath.Base(strings.TrimSuffix(paths[0], "/"))
+		if base != "" && base != "." && base != "/" {
+			zipName = base + ".zip"
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, zipName))
+
+	zw := zip.NewWriter(w)
+	defer zw.Close()
+
+	for _, p := range paths {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+
+		absPath := h.resolvePath(p)
+		entry, err := h.FileOp.Stat(r.Context(), *user, absPath)
+		if err != nil {
+			// Skip files we can't stat
+			continue
+		}
+
+		// Use the basename as the top-level name in the zip
+		baseName := filepath.Base(absPath)
+
+		if entry.Type == "dir" {
+			if err := h.addDirToZip(r, *user, zw, absPath, baseName); err != nil {
+				// Best effort: we've already started streaming, can't send error response
+				return
+			}
+		} else {
+			if err := h.addFileToZip(r, *user, zw, absPath, baseName); err != nil {
+				return
+			}
+		}
+	}
+}
+
+// addFileToZip adds a single file to the zip archive.
+func (h *Handlers) addFileToZip(r *http.Request, user fileop.User, zw *zip.Writer, absPath, zipPath string) error {
+	rc, err := h.FileOp.Read(r.Context(), user, absPath)
+	if err != nil {
+		return err
+	}
+	defer rc.Close()
+
+	fw, err := zw.Create(zipPath)
+	if err != nil {
+		return err
+	}
+
+	_, err = io.Copy(fw, rc)
+	return err
+}
+
+// addDirToZip recursively adds a directory and its contents to the zip archive.
+func (h *Handlers) addDirToZip(r *http.Request, user fileop.User, zw *zip.Writer, absPath, zipPath string) error {
+	entries, err := h.FileOp.List(r.Context(), user, absPath)
+	if err != nil {
+		return err
+	}
+
+	// Add directory entry (trailing slash)
+	if _, err := zw.Create(zipPath + "/"); err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		childAbs := filepath.Join(absPath, entry.Name)
+		childZip := zipPath + "/" + entry.Name
+
+		if entry.Type == "dir" {
+			if err := h.addDirToZip(r, user, zw, childAbs, childZip); err != nil {
+				return err
+			}
+		} else {
+			if err := h.addFileToZip(r, user, zw, childAbs, childZip); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 // resolvePath converts a virtual path like "/media/movies" to the real filesystem path.

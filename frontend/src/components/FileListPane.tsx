@@ -1,6 +1,7 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import type { FileEntry } from "../api/client";
 import type { ClipboardState } from "../hooks/useFileExplorer";
+import { downloadUrl } from "../api/client";
 import { formatSize } from "../utils/format";
 import ContextMenu from "./ContextMenu";
 import type { ContextMenuItem } from "./ContextMenu";
@@ -116,16 +117,57 @@ export default function FileListPane({
     }
   };
 
+  const renameInputRef = useRef<HTMLInputElement>(null);
+
   const startRename = (name: string) => {
     setEditName(name);
     setEditValue(name);
   };
+
+  // Auto-select filename without extension when rename input mounts
+  useEffect(() => {
+    if (editName && renameInputRef.current) {
+      const input = renameInputRef.current;
+      input.focus();
+      const dotIdx = editName.lastIndexOf(".");
+      if (dotIdx > 0) {
+        input.setSelectionRange(0, dotIdx);
+      } else {
+        input.select();
+      }
+    }
+  }, [editName]);
 
   const commitRename = () => {
     if (editName && editValue && editName !== editValue) {
       onRename(editName, editValue);
     }
     setEditName(null);
+  };
+
+  const handleBackgroundContextMenu = (e: React.MouseEvent) => {
+    // Only trigger if clicking the actual background, not a file row
+    if (e.target !== e.currentTarget) return;
+    e.preventDefault();
+
+    const items: ContextMenuItem[] = [];
+    items.push({
+      icon: "\u{1F4CB}",
+      label: "Paste here",
+      shortcut: "\u2318V",
+      action: onPaste,
+      disabled: !clipboard,
+    });
+    setContextMenu({ x: e.clientX, y: e.clientY, items });
+  };
+
+  const triggerDownload = (url: string) => {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
   const handleContextMenu = (e: React.MouseEvent, entry: FileEntry) => {
@@ -143,8 +185,31 @@ export default function FileListPane({
         label: "Open",
         action: () => onNavigate(currentPath + "/" + entry.name),
       });
-      items.push({ icon: "", label: "", action: () => {}, divider: true });
     }
+
+    // Download
+    if (multi) {
+      const paths = Array.from(selected).map((n) => currentPath + "/" + n);
+      items.push({
+        icon: "\u2B07\uFE0F",
+        label: `Download ${selected.size} items`,
+        action: () => triggerDownload(`/api/files/download-zip?paths=${encodeURIComponent(paths.join(","))}`),
+      });
+    } else if (entry.type === "dir") {
+      items.push({
+        icon: "\u2B07\uFE0F",
+        label: "Download as zip",
+        action: () => triggerDownload(`/api/files/download-zip?paths=${encodeURIComponent(currentPath + "/" + entry.name)}`),
+      });
+    } else {
+      items.push({
+        icon: "\u2B07\uFE0F",
+        label: "Download",
+        action: () => triggerDownload(downloadUrl(currentPath + "/" + entry.name)),
+      });
+    }
+
+    items.push({ icon: "", label: "", action: () => {}, divider: true });
 
     items.push({
       icon: "\u{1F4CB}",
@@ -224,8 +289,8 @@ export default function FileListPane({
       )}
 
       {/* Table */}
-      <div className="flex-1 overflow-auto">
-        <table className="w-full border-collapse table-fixed">
+      <div className="flex-1 overflow-auto" onContextMenu={handleBackgroundContextMenu}>
+        <table className="w-full border-collapse table-fixed select-none">
           <thead className="sticky top-0 bg-surface-alt z-[2]">
             <tr>
               {([
@@ -281,15 +346,17 @@ export default function FileListPane({
                         <span className="flex-shrink-0 text-[15px]">{fileIcon(entry)}</span>
                         {editName === entry.name ? (
                           <input
-                            className="flex-1 bg-bg border border-accent rounded px-1 py-0.5 text-sm text-text focus:outline-none"
+                            ref={renameInputRef}
+                            className="flex-1 bg-bg border border-accent rounded px-1 py-0.5 text-sm text-text focus:outline-none select-text"
                             value={editValue}
                             onChange={(e) => setEditValue(e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
                             onKeyDown={(e) => {
+                              e.stopPropagation();
                               if (e.key === "Enter") commitRename();
                               if (e.key === "Escape") setEditName(null);
                             }}
                             onBlur={commitRename}
-                            autoFocus
                           />
                         ) : (
                           <span

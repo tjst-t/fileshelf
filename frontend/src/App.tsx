@@ -44,6 +44,25 @@ export default function App() {
   const [treePaneWidth, setTreePaneWidth] = useState(240);
   const [previewPaneWidth, setPreviewPaneWidth] = useState(320);
 
+  // When right-clicking a folder in the tree, navigate to its parent and select the folder
+  const handleSelectForTree = useCallback(
+    (folderPath: string) => {
+      const lastSlash = folderPath.lastIndexOf("/");
+      const parentPath = folderPath.substring(0, lastSlash) || "";
+      const folderName = folderPath.substring(lastSlash + 1);
+
+      // Navigate to parent so the folder appears in file list, then select it
+      if (parentPath !== currentPath) {
+        navigate(parentPath).then(() => {
+          toggleSelect(folderName, false);
+        });
+      } else {
+        toggleSelect(folderName, false);
+      }
+    },
+    [currentPath, navigate, toggleSelect]
+  );
+
   const handlePreview = useCallback((entry: FileEntry) => {
     setPreviewEntry(entry);
     setShowPreview(true);
@@ -60,6 +79,10 @@ export default function App() {
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      // Don't intercept when typing in an input
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+
       const mod = e.metaKey || e.ctrlKey;
 
       if (mod && e.key === "c") {
@@ -130,7 +153,18 @@ export default function App() {
       <div className="flex-1 flex overflow-hidden">
         {/* Tree pane */}
         <div className="flex-shrink-0" style={{ width: treePaneWidth }}>
-          <TreePane shares={shares} currentPath={currentPath} onNavigate={navigate} />
+          <TreePane
+            shares={shares}
+            currentPath={currentPath}
+            clipboard={clipboard}
+            onNavigate={navigate}
+            onCopy={handleCopy}
+            onCut={handleCut}
+            onPaste={handlePaste}
+            onDelete={() => setShowDeleteDialog(true)}
+            onRename={handleRename}
+            onSelectForTree={handleSelectForTree}
+          />
         </div>
 
         <ResizeHandle onResize={handleTreeResize} />

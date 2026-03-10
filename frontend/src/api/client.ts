@@ -83,6 +83,10 @@ export async function renameFile(
   await handleResponse(res);
 }
 
+export function downloadZipUrl(paths: string[]): string {
+  return `/api/files/download-zip?paths=${encodeURIComponent(paths.join(","))}`;
+}
+
 export async function copyFile(
   path: string,
   dest: string

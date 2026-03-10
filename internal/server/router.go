@@ -41,6 +41,7 @@ func NewRouter(cfg *config.Config, fop fileop.FileOperator) http.Handler {
 	apiMux.HandleFunc("DELETE /api/files", h.HandleFilesDelete)
 	apiMux.HandleFunc("POST /api/files/rename", h.HandleFilesRename)
 	apiMux.HandleFunc("POST /api/files/copy", h.HandleFilesCopy)
+	apiMux.HandleFunc("GET /api/files/download-zip", h.HandleFilesDownloadZip)
 
 	// Wrap API with auth middleware
 	mux.Handle("/api/", authMiddleware(apiMux))

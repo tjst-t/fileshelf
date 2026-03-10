@@ -145,12 +145,21 @@ export default function PreviewPane({ entry, currentPath, onClose }: PreviewPane
 
         {/* Actions */}
         <div className="mt-4 flex flex-col gap-1.5">
-          <a
-            href={dlUrl}
-            className="block w-full text-center bg-accent/15 border border-accent/30 rounded-[5px] text-accent text-xs py-2 hover:bg-accent/25 no-underline"
-          >
-            ⬇ Download
-          </a>
+          {entry.type === "dir" ? (
+            <a
+              href={`/api/files/download-zip?paths=${encodeURIComponent(filePath)}`}
+              className="block w-full text-center bg-accent/15 border border-accent/30 rounded-[5px] text-accent text-xs py-2 hover:bg-accent/25 no-underline"
+            >
+              ⬇ Download as zip
+            </a>
+          ) : (
+            <a
+              href={dlUrl}
+              className="block w-full text-center bg-accent/15 border border-accent/30 rounded-[5px] text-accent text-xs py-2 hover:bg-accent/25 no-underline"
+            >
+              ⬇ Download
+            </a>
+          )}
           <button
             className="w-full border border-border-subtle rounded-[5px] text-text-muted text-xs py-2 cursor-pointer hover:bg-surface-raised bg-transparent"
             onClick={() => navigator.clipboard?.writeText("/" + filePath.replace(/^\/+/, ""))}
