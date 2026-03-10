@@ -31,10 +31,17 @@ func main() {
 		cfg.Server.Listen = fmt.Sprintf(":%d", *port)
 	}
 
-	fop := &fileop.ForkFileOperator{
-		HelperPath: cfg.Helper.Path,
-		Bases:      cfg.ShareBasePaths(),
-		Timeout:    cfg.Helper.Timeout,
+	var fop fileop.FileOperator
+	if cfg.Server.DevMode {
+		fop = &fileop.LocalFileOperator{
+			Bases: cfg.ShareBasePaths(),
+		}
+	} else {
+		fop = &fileop.ForkFileOperator{
+			HelperPath: cfg.Helper.Path,
+			Bases:      cfg.ShareBasePaths(),
+			Timeout:    cfg.Helper.Timeout,
+		}
 	}
 
 	router := server.NewRouter(cfg, fop)

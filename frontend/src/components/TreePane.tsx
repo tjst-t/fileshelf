@@ -51,14 +51,14 @@ function TreeItem({
           }}
         >
           {node.loading ? (
-            <span className="animate-spin">&#8635;</span>
+            <span className="animate-spin">{"\u21BB"}</span>
           ) : node.expanded ? (
-            "&#9662;"
+            "\u25BE"
           ) : (
-            "&#9656;"
+            "\u25B8"
           )}
         </button>
-        <span className="mr-1">&#128193;</span>
+        <span className="mr-1">{"\uD83D\uDCC1"}</span>
         <span className="truncate">{node.name}</span>
       </div>
       {node.expanded && node.children && (
