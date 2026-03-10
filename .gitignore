@@ -1,5 +1,7 @@
 # Binaries
 bin/
+/helper
+/server
 *.exe
 
 # Frontend
