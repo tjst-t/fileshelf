@@ -8,6 +8,7 @@ interface PreviewPaneProps {
   selectedEntries: FileEntry[];
   currentPath: string;
   onClose: () => void;
+  isMobile?: boolean;
 }
 
 function isText(name: string): boolean {
@@ -59,16 +60,29 @@ function formatDateLong(iso: string): string {
   });
 }
 
-export default function PreviewPane({ entry, selectedEntries, currentPath, onClose }: PreviewPaneProps) {
+export default function PreviewPane({ entry, selectedEntries, currentPath, onClose, isMobile }: PreviewPaneProps) {
   if (selectedEntries.length > 1) {
-    return <MultiPreview entries={selectedEntries} currentPath={currentPath} onClose={onClose} />;
+    return <MultiPreview entries={selectedEntries} currentPath={currentPath} onClose={onClose} isMobile={isMobile} />;
   }
 
   if (!entry) {
     return (
-      <div className="h-full flex flex-col items-center justify-center text-text-dark text-[13px] bg-surface border-l border-border">
-        <span className="text-[32px] mb-2">👁</span>
-        Select a file to preview
+      <div className={`h-full flex flex-col bg-surface ${isMobile ? "" : "border-l border-border"}`}>
+        {isMobile && (
+          <div className="px-3.5 py-3.5 border-b border-border flex items-center justify-between flex-shrink-0">
+            <span className="text-xs font-semibold text-text-muted uppercase tracking-[0.05em]">Preview</span>
+            <button
+              onClick={onClose}
+              className="w-9 h-9 flex items-center justify-center rounded-md hover:bg-surface-raised text-text-dim hover:text-text cursor-pointer text-lg leading-none"
+            >
+              ×
+            </button>
+          </div>
+        )}
+        <div className="flex-1 flex flex-col items-center justify-center text-text-dark text-[13px]">
+          <span className="text-[32px] mb-2">👁</span>
+          Select a file to preview
+        </div>
       </div>
     );
   }
@@ -87,13 +101,13 @@ export default function PreviewPane({ entry, selectedEntries, currentPath, onClo
   ];
 
   return (
-    <div className="h-full flex flex-col bg-surface border-l border-border overflow-hidden">
+    <div className={`h-full flex flex-col bg-surface overflow-hidden ${isMobile ? "" : "border-l border-border"}`}>
       {/* Header */}
-      <div className="px-3.5 py-3 border-b border-border flex items-center justify-between">
+      <div className={`px-3.5 border-b border-border flex items-center justify-between flex-shrink-0 ${isMobile ? "py-3.5" : "py-3"}`}>
         <span className="text-xs font-semibold text-text-muted uppercase tracking-[0.05em]">Preview</span>
         <button
           onClick={onClose}
-          className="text-text-dim hover:text-text cursor-pointer text-base leading-none px-1"
+          className={`text-text-dim hover:text-text cursor-pointer leading-none ${isMobile ? "w-9 h-9 flex items-center justify-center rounded-md hover:bg-surface-raised text-lg" : "text-base px-1"}`}
         >
           ×
         </button>
@@ -149,24 +163,24 @@ export default function PreviewPane({ entry, selectedEntries, currentPath, onClo
         </div>
 
         {/* Actions */}
-        <div className="mt-4 flex flex-col gap-1.5">
+        <div className={`mt-4 flex flex-col gap-1.5 ${isMobile ? "pb-4" : ""}`}>
           {entry.type === "dir" ? (
             <a
               href={`/api/files/download-zip?paths=${encodeURIComponent(filePath)}`}
-              className="block w-full text-center bg-accent/15 border border-accent/30 rounded-[5px] text-accent text-xs py-2 hover:bg-accent/25 no-underline"
+              className={`block w-full text-center bg-accent/15 border border-accent/30 rounded-[5px] text-accent text-xs hover:bg-accent/25 no-underline ${isMobile ? "py-3" : "py-2"}`}
             >
               ⬇ Download as zip
             </a>
           ) : (
             <a
               href={dlUrl}
-              className="block w-full text-center bg-accent/15 border border-accent/30 rounded-[5px] text-accent text-xs py-2 hover:bg-accent/25 no-underline"
+              className={`block w-full text-center bg-accent/15 border border-accent/30 rounded-[5px] text-accent text-xs hover:bg-accent/25 no-underline ${isMobile ? "py-3" : "py-2"}`}
             >
               ⬇ Download
             </a>
           )}
           <button
-            className="w-full border border-border-subtle rounded-[5px] text-text-muted text-xs py-2 cursor-pointer hover:bg-surface-raised bg-transparent"
+            className={`w-full border border-border-subtle rounded-[5px] text-text-muted text-xs cursor-pointer hover:bg-surface-raised bg-transparent ${isMobile ? "py-3" : "py-2"}`}
             onClick={() => navigator.clipboard?.writeText("/" + filePath.replace(/^\/+/, ""))}
           >
             📋 Copy path
@@ -177,20 +191,20 @@ export default function PreviewPane({ entry, selectedEntries, currentPath, onClo
   );
 }
 
-function MultiPreview({ entries, currentPath, onClose }: { entries: FileEntry[]; currentPath: string; onClose: () => void }) {
+function MultiPreview({ entries, currentPath, onClose, isMobile }: { entries: FileEntry[]; currentPath: string; onClose: () => void; isMobile?: boolean }) {
   const dirs = entries.filter(e => e.type === "dir");
   const files = entries.filter(e => e.type === "file");
   const totalSize = entries.reduce((sum, e) => sum + e.size, 0);
   const paths = entries.map(e => currentPath + "/" + e.name);
 
   return (
-    <div className="h-full flex flex-col bg-surface border-l border-border overflow-hidden">
+    <div className={`h-full flex flex-col bg-surface overflow-hidden ${isMobile ? "" : "border-l border-border"}`}>
       {/* Header */}
-      <div className="px-3.5 py-3 border-b border-border flex items-center justify-between">
+      <div className={`px-3.5 border-b border-border flex items-center justify-between flex-shrink-0 ${isMobile ? "py-3.5" : "py-3"}`}>
         <span className="text-xs font-semibold text-text-muted uppercase tracking-[0.05em]">Preview</span>
         <button
           onClick={onClose}
-          className="text-text-dim hover:text-text cursor-pointer text-base leading-none px-1"
+          className={`text-text-dim hover:text-text cursor-pointer leading-none ${isMobile ? "w-9 h-9 flex items-center justify-center rounded-md hover:bg-surface-raised text-lg" : "text-base px-1"}`}
         >
           ×
         </button>
@@ -212,7 +226,7 @@ function MultiPreview({ entries, currentPath, onClose }: { entries: FileEntry[];
         {/* Item list */}
         <div className="mb-4">
           {entries.map(e => (
-            <div key={e.name} className="flex items-center gap-2 py-1.5 border-b border-border/40 text-xs">
+            <div key={e.name} className={`flex items-center gap-2 border-b border-border/40 text-xs ${isMobile ? "py-2.5" : "py-1.5"}`}>
               <span className="text-sm flex-shrink-0">{fileIcon(e.name, e.type)}</span>
               <span className="truncate text-text-muted">{e.name}</span>
               <span className="ml-auto text-text-faint font-mono text-[11px] flex-shrink-0">
@@ -231,10 +245,10 @@ function MultiPreview({ entries, currentPath, onClose }: { entries: FileEntry[];
         </div>
 
         {/* Actions */}
-        <div className="mt-4 flex flex-col gap-1.5">
+        <div className={`mt-4 flex flex-col gap-1.5 ${isMobile ? "pb-4" : ""}`}>
           <a
             href={`/api/files/download-zip?paths=${encodeURIComponent(paths.join(","))}`}
-            className="block w-full text-center bg-accent/15 border border-accent/30 rounded-[5px] text-accent text-xs py-2 hover:bg-accent/25 no-underline"
+            className={`block w-full text-center bg-accent/15 border border-accent/30 rounded-[5px] text-accent text-xs hover:bg-accent/25 no-underline ${isMobile ? "py-3" : "py-2"}`}
           >
             ⬇ Download as zip
           </a>

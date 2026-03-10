@@ -72,7 +72,7 @@ function TreeItem({
               ? "bg-accent/18 text-text border-r-2 border-accent"
               : "text-text-muted border-r-2 border-transparent hover:bg-hover-row"
         }`}
-        style={{ paddingLeft: `${depth * 16 + 8}px`, paddingTop: 4, paddingBottom: 4, paddingRight: 8 }}
+        style={{ paddingLeft: `${depth * 16 + 8}px`, paddingTop: 8, paddingBottom: 8, paddingRight: 8 }}
         onClick={() => {
           onNavigate(node.path);
           onToggle(node.path);

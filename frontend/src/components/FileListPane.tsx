@@ -24,6 +24,7 @@ interface FileListPaneProps {
   onPaste: () => void;
   onDelete: () => void;
   onShowDropMenu: (paths: string[], destDir: string, x: number, y: number, sameDir: boolean) => void;
+  isMobile?: boolean;
 }
 
 type SortKey = "name" | "size" | "modified" | "perms";
@@ -38,6 +39,14 @@ function formatDate(iso: string): string {
   }) + " " + d.toLocaleTimeString("ja-JP", {
     hour: "2-digit",
     minute: "2-digit",
+  });
+}
+
+function formatDateShort(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleDateString("ja-JP", {
+    month: "2-digit",
+    day: "2-digit",
   });
 }
 
@@ -73,6 +82,7 @@ export default function FileListPane({
   onPaste,
   onDelete,
   onShowDropMenu,
+  isMobile,
 }: FileListPaneProps) {
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
@@ -86,6 +96,10 @@ export default function FileListPane({
   const [lasso, setLasso] = useState<{ startX: number; startY: number; endX: number; endY: number } | null>(null);
   const lassoActiveRef = useRef(false);
   const tableContainerRef = useRef<HTMLDivElement>(null);
+
+  // Long-press for context menu on mobile
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressTriggered = useRef(false);
 
   const handleSort = useCallback(
     (key: SortKey) => {
@@ -198,9 +212,10 @@ export default function FileListPane({
     onShowDropMenu(paths, destDir, e.clientX, e.clientY, sourceDir === destDir);
   };
 
-  // --- Lasso (rubber-band) selection ---
+  // --- Lasso (rubber-band) selection (desktop only) ---
 
   const handleLassoMouseDown = (e: React.MouseEvent) => {
+    if (isMobile) return;
     if (e.button !== 0) return;
     const target = e.target as HTMLElement;
     if (target.closest("tr[data-row-name]")) return;
@@ -281,13 +296,8 @@ export default function FileListPane({
     document.body.removeChild(a);
   };
 
-  const handleContextMenu = (e: React.MouseEvent, entry: FileEntry) => {
-    e.preventDefault();
-    if (!selected.has(entry.name)) {
-      onSelect(entry.name, false);
-    }
+  const buildContextMenuItems = (entry: FileEntry): ContextMenuItem[] => {
     const multi = selected.has(entry.name) ? selected.size > 1 : false;
-
     const items: ContextMenuItem[] = [];
 
     if (entry.type === "dir" && !multi) {
@@ -359,7 +369,44 @@ export default function FileListPane({
       action: onDelete,
     });
 
-    setContextMenu({ x: e.clientX, y: e.clientY, items });
+    return items;
+  };
+
+  const handleContextMenu = (e: React.MouseEvent, entry: FileEntry) => {
+    e.preventDefault();
+    if (!selected.has(entry.name)) {
+      onSelect(entry.name, false);
+    }
+    setContextMenu({ x: e.clientX, y: e.clientY, items: buildContextMenuItems(entry) });
+  };
+
+  // Long-press handlers for mobile context menu
+  const handleTouchStart = (entry: FileEntry) => {
+    longPressTriggered.current = false;
+    longPressTimer.current = setTimeout(() => {
+      longPressTriggered.current = true;
+      if (!selected.has(entry.name)) {
+        onSelect(entry.name, false);
+      }
+      // Show context menu centered on screen for mobile
+      const x = window.innerWidth / 2;
+      const y = window.innerHeight / 2;
+      setContextMenu({ x, y, items: buildContextMenuItems(entry) });
+    }, 500);
+  };
+
+  const handleTouchEnd = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
+  const handleTouchMove = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
   };
 
   const sortIndicator = (key: SortKey) => {
@@ -376,6 +423,124 @@ export default function FileListPane({
     );
   }
 
+  // Mobile: card/list layout
+  if (isMobile) {
+    return (
+      <div
+        className="h-full flex flex-col overflow-hidden relative"
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (!e.dataTransfer.types.includes("application/x-fileshelf")) {
+            setDragOver(true);
+          }
+        }}
+        onDragLeave={(e) => { e.stopPropagation(); setDragOver(false); }}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setDragOver(false);
+          if (e.dataTransfer.files.length > 0) {
+            onDrop(e.dataTransfer.files);
+          }
+        }}
+      >
+        {dragOver && (
+          <div className="absolute inset-2 bg-accent/8 border-2 border-dashed border-accent rounded-lg z-10 flex items-center justify-center text-base text-accent font-medium pointer-events-none">
+            Drop files to upload
+          </div>
+        )}
+
+        <div ref={tableContainerRef} className="flex-1 overflow-auto">
+          {loading ? (
+            <div className="py-8 text-center text-text-muted text-sm">Loading...</div>
+          ) : sorted.length === 0 ? (
+            <div className="py-10 text-center text-text-dark text-sm">Empty directory</div>
+          ) : (
+            <div className="divide-y divide-border/50">
+              {sorted.map((entry) => {
+                const isSelected = selected.has(entry.name);
+                const isCut = clipboard?.mode === "cut" && clipboard.entries.some((e) => e.name === entry.name);
+                return (
+                  <div
+                    key={entry.name}
+                    data-row-name={entry.name}
+                    className={`flex items-center gap-3 px-3 py-2.5 min-h-[48px] transition-colors active:bg-accent/15 ${
+                      isSelected ? "bg-accent/12" : ""
+                    }`}
+                    style={{ opacity: isCut ? 0.4 : 1 }}
+                    onClick={(e) => {
+                      if (longPressTriggered.current) return;
+                      onSelect(entry.name, e.ctrlKey || e.metaKey);
+                    }}
+                    onDoubleClick={() => handleDoubleClick(entry)}
+                    onTouchStart={() => handleTouchStart(entry)}
+                    onTouchEnd={handleTouchEnd}
+                    onTouchMove={handleTouchMove}
+                    onContextMenu={(e) => handleContextMenu(e, entry)}
+                  >
+                    <span className="flex-shrink-0 text-xl">{fileIcon(entry)}</span>
+                    <div className="flex-1 min-w-0">
+                      {editName === entry.name ? (
+                        <input
+                          ref={renameInputRef}
+                          className="w-full bg-bg border border-accent rounded px-2 py-1 text-sm text-text focus:outline-none select-text"
+                          value={editValue}
+                          onChange={(e) => setEditValue(e.target.value)}
+                          onClick={(e) => e.stopPropagation()}
+                          onKeyDown={(e) => {
+                            e.stopPropagation();
+                            if (e.key === "Enter") commitRename();
+                            if (e.key === "Escape") setEditName(null);
+                          }}
+                          onBlur={commitRename}
+                        />
+                      ) : (
+                        <>
+                          <div className={`text-sm truncate ${entry.type === "dir" ? "text-accent" : "text-text"}`}>
+                            {entry.name}
+                          </div>
+                          <div className="text-[11px] text-text-faint font-mono mt-0.5">
+                            {entry.type === "dir" ? "Folder" : formatSize(entry.size)}
+                            {" · "}
+                            {formatDateShort(entry.modified)}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                    {entry.type === "dir" && (
+                      <button
+                        className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-md text-text-dim hover:bg-surface-raised"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onNavigate(currentPath + "/" + entry.name);
+                        }}
+                      >
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="6 4 10 8 6 12" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {contextMenu && (
+          <ContextMenu
+            x={contextMenu.x}
+            y={contextMenu.y}
+            items={contextMenu.items}
+            onClose={() => setContextMenu(null)}
+          />
+        )}
+      </div>
+    );
+  }
+
+  // Desktop: table layout
   return (
     <div
       className="h-full flex flex-col overflow-hidden relative"

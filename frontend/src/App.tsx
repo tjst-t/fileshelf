@@ -3,6 +3,7 @@ import type { FileEntry } from "./api/client";
 import { fetchVersion } from "./api/client";
 import { useFileExplorer } from "./hooks/useFileExplorer";
 import { useTheme } from "./hooks/useTheme";
+import { useIsMobile, useIsTablet } from "./hooks/useMediaQuery";
 import TitleBar from "./components/TitleBar";
 import TreePane from "./components/TreePane";
 import Toolbar from "./components/Toolbar";
@@ -17,6 +18,8 @@ import ContextMenu from "./components/ContextMenu";
 
 export default function App() {
   const { theme, toggleTheme } = useTheme();
+  const isMobile = useIsMobile();
+  const isTablet = useIsTablet();
 
   const {
     shares,
@@ -59,6 +62,7 @@ export default function App() {
   const [treePaneWidth, setTreePaneWidth] = useState(240);
   const [previewPaneWidth, setPreviewPaneWidth] = useState(320);
   const [globalDragOver, setGlobalDragOver] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   // Drop menu state (shown after left-click DnD drop on a folder)
   const [dropMenu, setDropMenu] = useState<{
@@ -70,6 +74,15 @@ export default function App() {
       setDropMenu({ x, y, paths, destDir, sameDir });
     },
     []
+  );
+
+  // Close drawer when navigating on mobile
+  const handleNavigate = useCallback(
+    (path: string) => {
+      if (isMobile) setDrawerOpen(false);
+      return navigate(path);
+    },
+    [isMobile, navigate]
   );
 
   // When right-clicking a folder in the tree, navigate to its parent and select the folder
@@ -161,6 +174,7 @@ export default function App() {
       } else if (e.key === "Escape") {
         clearSelection();
         setShowDeleteDialog(false);
+        setDrawerOpen(false);
       } else if (e.key === "F5" || (mod && e.key === "r")) {
         e.preventDefault();
         refresh();
@@ -186,6 +200,23 @@ export default function App() {
   // Compute selected entries for preview
   const selectedEntries = entries.filter((e) => selected.has(e.name));
 
+  // Tree pane content (shared between drawer and sidebar)
+  const treePaneContent = (
+    <TreePane
+      shares={shares}
+      currentPath={currentPath}
+      clipboard={clipboard}
+      onNavigate={handleNavigate}
+      onCopy={handleCopy}
+      onCut={handleCut}
+      onPaste={handlePaste}
+      onDelete={() => setShowDeleteDialog(true)}
+      onRename={handleRename}
+      onSelectForTree={handleSelectForTree}
+      onShowDropMenu={handleShowDropMenu}
+    />
+  );
+
   return (
     <div
       className="h-full flex flex-col relative"
@@ -207,18 +238,25 @@ export default function App() {
       )}
 
       {/* Title bar */}
-      <TitleBar username="tjstkm" version={version} theme={theme} onToggleTheme={toggleTheme} />
+      <TitleBar
+        username="tjstkm"
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        onToggleDrawer={() => setDrawerOpen((o) => !o)}
+        isMobile={isMobile}
+      />
 
       {/* Toolbar */}
       <Toolbar
         currentPath={currentPath}
-        onNavigate={navigate}
+        onNavigate={handleNavigate}
         onGoUp={goUp}
         onRefresh={refresh}
         onNewFolder={handleMkdir}
         onUpload={handleUpload}
         showPreview={showPreview}
         onTogglePreview={() => setShowPreview((p) => !p)}
+        isMobile={isMobile}
       />
 
       {/* Clipboard bar */}
@@ -227,29 +265,40 @@ export default function App() {
           clipboard={clipboard}
           onPaste={handlePaste}
           onCancel={clearClipboard}
+          isMobile={isMobile}
         />
       )}
 
       {/* Main content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Tree pane */}
-        <div className="flex-shrink-0" style={{ width: treePaneWidth }}>
-          <TreePane
-            shares={shares}
-            currentPath={currentPath}
-            clipboard={clipboard}
-            onNavigate={navigate}
-            onCopy={handleCopy}
-            onCut={handleCut}
-            onPaste={handlePaste}
-            onDelete={() => setShowDeleteDialog(true)}
-            onRename={handleRename}
-            onSelectForTree={handleSelectForTree}
-            onShowDropMenu={handleShowDropMenu}
-          />
-        </div>
-
-        <ResizeHandle onResize={handleTreeResize} />
+        {/* Mobile: Drawer overlay */}
+        {isMobile ? (
+          <>
+            {/* Backdrop */}
+            {drawerOpen && (
+              <div
+                className="fixed inset-0 bg-black/50 z-30"
+                onClick={() => setDrawerOpen(false)}
+              />
+            )}
+            {/* Drawer */}
+            <div
+              className={`fixed inset-y-0 left-0 z-40 w-[280px] transform transition-transform duration-200 ease-out ${
+                drawerOpen ? "translate-x-0" : "-translate-x-full"
+              }`}
+            >
+              {treePaneContent}
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Desktop: Tree pane sidebar */}
+            <div className="flex-shrink-0" style={{ width: treePaneWidth }}>
+              {treePaneContent}
+            </div>
+            <ResizeHandle onResize={handleTreeResize} />
+          </>
+        )}
 
         {/* File list */}
         <div className="flex-1 min-w-0 flex flex-col">
@@ -262,7 +311,7 @@ export default function App() {
               currentPath={currentPath}
               loading={loading}
               clipboard={clipboard}
-              onNavigate={navigate}
+              onNavigate={handleNavigate}
               onSelect={toggleSelect}
               onSelectRange={selectRange}
               onSetSelected={setSelectedSet}
@@ -274,28 +323,43 @@ export default function App() {
               onPaste={handlePaste}
               onDelete={() => setShowDeleteDialog(true)}
               onShowDropMenu={handleShowDropMenu}
+              isMobile={isMobile}
             />
           )}
         </div>
 
         {/* Preview pane */}
         {showPreview && (
-          <>
-            <ResizeHandle onResize={handlePreviewResize} />
-            <div className="flex-shrink-0" style={{ width: previewPaneWidth }}>
+          isMobile ? (
+            /* Mobile: Full-screen overlay */
+            <div className="fixed inset-0 z-30 bg-surface flex flex-col">
               <PreviewPane
                 entry={previewEntry}
                 selectedEntries={selectedEntries}
                 currentPath={currentPath}
                 onClose={() => setShowPreview(false)}
+                isMobile={isMobile}
               />
             </div>
-          </>
+          ) : (
+            <>
+              <ResizeHandle onResize={handlePreviewResize} />
+              <div className="flex-shrink-0" style={{ width: isTablet ? Math.min(previewPaneWidth, 280) : previewPaneWidth }}>
+                <PreviewPane
+                  entry={previewEntry}
+                  selectedEntries={selectedEntries}
+                  currentPath={currentPath}
+                  onClose={() => setShowPreview(false)}
+                  isMobile={false}
+                />
+              </div>
+            </>
+          )
         )}
       </div>
 
       {/* Status bar */}
-      <StatusBar entries={entries} selected={selected} version={version} />
+      <StatusBar entries={entries} selected={selected} version={version} isMobile={isMobile} />
 
       {/* Toast */}
       {toast && <Toast message={toast.message} type={toast.type} />}

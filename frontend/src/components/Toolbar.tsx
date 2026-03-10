@@ -10,6 +10,7 @@ interface ToolbarProps {
   onUpload: (files: FileList) => void;
   showPreview: boolean;
   onTogglePreview: () => void;
+  isMobile?: boolean;
 }
 
 export default function Toolbar({
@@ -21,6 +22,7 @@ export default function Toolbar({
   onUpload,
   showPreview,
   onTogglePreview,
+  isMobile,
 }: ToolbarProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showNewFolder, setShowNewFolder] = useState(false);
@@ -35,10 +37,10 @@ export default function Toolbar({
   };
 
   const btnBase =
-    "border border-border-subtle rounded px-2.5 py-0.5 text-xs cursor-pointer transition-colors";
+    "border border-border-subtle rounded px-2.5 py-1 md:py-0.5 text-xs cursor-pointer transition-colors min-h-[36px] md:min-h-0";
 
   return (
-    <div className="h-10 bg-surface-alt border-b border-border flex items-center px-3 gap-2 flex-shrink-0">
+    <div className="min-h-[40px] bg-surface-alt border-b border-border flex items-center px-2 md:px-3 gap-1.5 md:gap-2 flex-shrink-0 flex-wrap py-1 md:py-0">
       <button
         className={`${btnBase} text-text-muted hover:text-text hover:bg-surface-raised disabled:opacity-30 disabled:cursor-default text-sm`}
         onClick={onGoUp}
@@ -64,9 +66,9 @@ export default function Toolbar({
       {currentPath && (
         <>
           {showNewFolder ? (
-            <div className="flex items-center gap-1">
+            <div className={`flex items-center gap-1 ${isMobile ? "w-full order-last" : ""}`}>
               <input
-                className="px-2 py-0.5 text-xs bg-bg border border-accent rounded text-text w-32 focus:outline-none"
+                className="px-2 py-1 md:py-0.5 text-xs bg-bg border border-accent rounded text-text flex-1 md:w-32 focus:outline-none"
                 value={folderName}
                 onChange={(e) => setFolderName(e.target.value)}
                 onKeyDown={(e) => {
@@ -77,7 +79,7 @@ export default function Toolbar({
                 autoFocus
               />
               <button
-                className="px-2 py-0.5 text-xs rounded bg-accent text-bg hover:bg-accent-hover cursor-pointer"
+                className="px-3 py-1 md:py-0.5 text-xs rounded bg-accent text-bg hover:bg-accent-hover cursor-pointer min-h-[36px] md:min-h-0"
                 onClick={handleNewFolder}
               >
                 OK
@@ -95,16 +97,16 @@ export default function Toolbar({
               onClick={() => setShowNewFolder(true)}
               title="New Folder"
             >
-              + New folder
+              {isMobile ? "+" : "+ New folder"}
             </button>
           )}
 
           <button
-            className="border border-accent/30 bg-accent/15 rounded px-2.5 py-0.5 text-xs text-accent cursor-pointer hover:bg-accent/25 transition-colors"
+            className="border border-accent/30 bg-accent/15 rounded px-2.5 py-1 md:py-0.5 text-xs text-accent cursor-pointer hover:bg-accent/25 transition-colors min-h-[36px] md:min-h-0"
             onClick={() => fileInputRef.current?.click()}
             title="Upload"
           >
-            ⬆ Upload
+            {isMobile ? "⬆" : "⬆ Upload"}
           </button>
           <input
             ref={fileInputRef}
@@ -121,7 +123,7 @@ export default function Toolbar({
         </>
       )}
 
-      <div className="w-px h-5 bg-border-subtle" />
+      {!isMobile && <div className="w-px h-5 bg-border-subtle" />}
 
       <button
         className={`${btnBase} ${
@@ -132,7 +134,7 @@ export default function Toolbar({
         onClick={onTogglePreview}
         title="Toggle Preview"
       >
-        ☰ Preview
+        {isMobile ? "👁" : "☰ Preview"}
       </button>
     </div>
   );
