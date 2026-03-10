@@ -40,6 +40,14 @@ export function useFileExplorer() {
   }, []);
 
   const navigate = useCallback(async (path: string) => {
+    if (!path) {
+      // Navigate to root = show "Select a share" screen
+      setCurrentPath("");
+      setEntries([]);
+      setSelected(new Set());
+      setError(null);
+      return;
+    }
     setLoading(true);
     setError(null);
     setSelected(new Set());

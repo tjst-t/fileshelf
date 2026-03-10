@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import type { Share, FileEntry } from "../api/client";
 import type { ClipboardState } from "../hooks/useFileExplorer";
 import { fetchFiles } from "../api/client";
@@ -54,6 +54,7 @@ function TreeItem({
   return (
     <div>
       <div
+        data-tree-path={node.path}
         className={`flex items-center gap-1.5 cursor-pointer select-none text-[13px] transition-all duration-150 ${
           isActive
             ? "bg-accent/18 text-text border-r-2 border-accent"
@@ -78,7 +79,7 @@ function TreeItem({
             onToggle(node.path);
           }}
         >
-          {node.loading ? "\u21BB" : "\u25B6"}
+          {"\u25B6"}
         </span>
         <span className="text-sm">{node.expanded ? "\uD83D\uDCC2" : "\uD83D\uDCC1"}</span>
         <span className="truncate">{node.name}</span>
@@ -116,6 +117,7 @@ export default function TreePane({
 }: TreePaneProps) {
   const [nodes, setNodes] = useState<TreeNode[]>([]);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
+  const treeRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setNodes(
@@ -128,6 +130,103 @@ export default function TreePane({
       }))
     );
   }, [shares]);
+
+  // Auto-expand tree to match currentPath and scroll active node into view
+  useEffect(() => {
+    if (!currentPath || nodes.length === 0) return;
+
+    // Build ancestor paths: "/media" → ["/media"], "/media/photos/trip" → ["/media", "/media/photos", "/media/photos/trip"]
+    const segments = currentPath.replace(/^\//, "").split("/");
+    const ancestors: string[] = [];
+    for (let i = 0; i < segments.length; i++) {
+      ancestors.push("/" + segments.slice(0, i + 1).join("/"));
+    }
+
+    let cancelled = false;
+
+    const expandPath = async () => {
+      for (const ancestorPath of ancestors) {
+        if (cancelled) return;
+
+        // Check current state to see if we need to expand/fetch
+        const needsWork = await new Promise<"fetch" | "expand" | "none">((resolve) => {
+          setNodes((prev) => {
+            const node = findNodeIn(prev, ancestorPath);
+            if (!node) { resolve("none"); return prev; }
+            if (node.expanded) { resolve("none"); return prev; }
+            if (node.children !== null) {
+              // Has children already, just expand
+              resolve("expand");
+              return updateNode(prev, ancestorPath, (n) => ({ ...n, expanded: true }));
+            }
+            // Needs fetch
+            resolve("fetch");
+            return prev;
+          });
+        });
+
+        if (cancelled) return;
+
+        if (needsWork === "fetch") {
+          try {
+            const entries: FileEntry[] = await fetchFiles(ancestorPath);
+            if (cancelled) return;
+            const children: TreeNode[] = entries
+              .filter((e) => e.type === "dir")
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map((e) => ({
+                name: e.name,
+                path: ancestorPath + "/" + e.name,
+                children: null,
+                expanded: false,
+                loading: false,
+              }));
+            setNodes((prev) =>
+              updateNode(prev, ancestorPath, (n) => ({ ...n, children, expanded: true, loading: false }))
+            );
+          } catch {
+            // Stop expanding if fetch fails
+            return;
+          }
+        }
+      }
+
+      // Scroll active node into view after expansion
+      if (!cancelled) {
+        requestAnimationFrame(() => {
+          if (treeRef.current) {
+            const el = treeRef.current.querySelector(`[data-tree-path="${CSS.escape(currentPath)}"]`);
+            if (el) {
+              el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+            }
+          }
+        });
+      }
+    };
+
+    expandPath();
+    return () => { cancelled = true; };
+  }, [currentPath, nodes.length]); // only re-run when path changes or shares load
+
+  // Helper: find a node by path in the tree
+  const findNodeIn = (nodes: TreeNode[], path: string): TreeNode | null => {
+    for (const n of nodes) {
+      if (n.path === path) return n;
+      if (n.children) {
+        const found = findNodeIn(n.children, path);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
+  // Helper: update a single node by path
+  const updateNode = (nodes: TreeNode[], path: string, updater: (n: TreeNode) => TreeNode): TreeNode[] =>
+    nodes.map((n) => {
+      if (n.path === path) return updater(n);
+      if (n.children) return { ...n, children: updateNode(n.children, path, updater) };
+      return n;
+    });
 
   const toggleNode = useCallback(
     async (path: string) => {
@@ -302,9 +401,31 @@ export default function TreePane({
   );
 
   return (
-    <div className="h-full overflow-y-auto bg-surface border-r border-border">
-      <div className="px-3 py-2 text-[10px] font-semibold text-text-faint uppercase tracking-[0.1em] border-b border-border">
-        Shares
+    <div ref={treeRef} className="h-full overflow-y-auto bg-surface border-r border-border">
+      <div className="px-3 py-2 flex items-center justify-between border-b border-border">
+        <span className="text-[10px] font-semibold text-text-faint uppercase tracking-[0.1em]">
+          Shares
+        </span>
+        <button
+          className="w-5 h-5 flex items-center justify-center rounded text-text-dim hover:text-text hover:bg-hover-row transition-colors cursor-pointer"
+          title="Collapse all"
+          onClick={() => {
+            setNodes((prev) => {
+              const collapseAll = (nodes: TreeNode[]): TreeNode[] =>
+                nodes.map((n) => ({
+                  ...n,
+                  expanded: false,
+                  children: n.children ? collapseAll(n.children) : null,
+                }));
+              return collapseAll(prev);
+            });
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <rect x="2" y="3" width="12" height="10" rx="1.5" />
+            <line x1="5" y1="8" x2="11" y2="8" />
+          </svg>
+        </button>
       </div>
       {nodes.map((node) => (
         <TreeItem
