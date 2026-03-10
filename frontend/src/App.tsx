@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import type { FileEntry } from "./api/client";
 import { useFileExplorer } from "./hooks/useFileExplorer";
+import { useTheme } from "./hooks/useTheme";
 import TitleBar from "./components/TitleBar";
 import TreePane from "./components/TreePane";
 import Toolbar from "./components/Toolbar";
@@ -13,6 +14,8 @@ import DeleteDialog from "./components/DeleteDialog";
 import ResizeHandle from "./components/ResizeHandle";
 
 export default function App() {
+  const { theme, toggleTheme } = useTheme();
+
   const {
     shares,
     currentPath,
@@ -43,6 +46,7 @@ export default function App() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [treePaneWidth, setTreePaneWidth] = useState(240);
   const [previewPaneWidth, setPreviewPaneWidth] = useState(320);
+  const [globalDragOver, setGlobalDragOver] = useState(false);
 
   // When right-clicking a folder in the tree, navigate to its parent and select the folder
   const handleSelectForTree = useCallback(
@@ -51,7 +55,6 @@ export default function App() {
       const parentPath = folderPath.substring(0, lastSlash) || "";
       const folderName = folderPath.substring(lastSlash + 1);
 
-      // Navigate to parent so the folder appears in file list, then select it
       if (parentPath !== currentPath) {
         navigate(parentPath).then(() => {
           toggleSelect(folderName, false);
@@ -75,6 +78,35 @@ export default function App() {
   const handlePreviewResize = useCallback((delta: number) => {
     setPreviewPaneWidth((w) => Math.max(220, Math.min(600, w - delta)));
   }, []);
+
+  // Global drag-and-drop for upload
+  const handleGlobalDragOver = useCallback(
+    (e: React.DragEvent) => {
+      if (!currentPath) return;
+      e.preventDefault();
+      setGlobalDragOver(true);
+    },
+    [currentPath]
+  );
+
+  const handleGlobalDragLeave = useCallback((e: React.DragEvent) => {
+    // Only hide overlay when leaving the root element
+    if (e.currentTarget === e.target || !e.currentTarget.contains(e.relatedTarget as Node)) {
+      setGlobalDragOver(false);
+    }
+  }, []);
+
+  const handleGlobalDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setGlobalDragOver(false);
+      if (!currentPath) return;
+      if (e.dataTransfer.files.length > 0) {
+        handleUpload(e.dataTransfer.files);
+      }
+    },
+    [currentPath, handleUpload]
+  );
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -125,9 +157,27 @@ export default function App() {
   }, [selected, entries]);
 
   return (
-    <div className="h-full flex flex-col">
+    <div
+      className="h-full flex flex-col relative"
+      onDragOver={handleGlobalDragOver}
+      onDragLeave={handleGlobalDragLeave}
+      onDrop={handleGlobalDrop}
+    >
+      {/* Global drag overlay */}
+      {globalDragOver && (
+        <div className="absolute inset-0 z-50 bg-accent/10 flex items-center justify-center pointer-events-none">
+          <div className="bg-surface border-2 border-dashed border-accent rounded-xl px-12 py-8 text-center shadow-xl">
+            <div className="text-4xl mb-3">📂</div>
+            <div className="text-lg font-medium text-accent">Drop files to upload</div>
+            <div className="text-sm text-text-muted mt-1">
+              to {currentPath}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Title bar */}
-      <TitleBar username="tjstkm" />
+      <TitleBar username="tjstkm" theme={theme} onToggleTheme={toggleTheme} />
 
       {/* Toolbar */}
       <Toolbar

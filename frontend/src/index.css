@@ -3,6 +3,8 @@
 @theme {
   --font-sans: "IBM Plex Sans", system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+  /* Dark theme (default) */
   --color-bg: #0f1219;
   --color-surface: #131720;
   --color-surface-alt: #151a24;
@@ -19,6 +21,7 @@
   --color-danger: #f87171;
   --color-success: #4ec9b0;
   --color-warning: #fb923c;
+  --color-hover-row: rgba(255, 255, 255, 0.02);
 }
 
 @layer base {
@@ -45,5 +48,26 @@
 
   ::selection {
     @apply bg-accent/30;
+  }
+
+  /* Light theme overrides */
+  [data-theme="light"] {
+    --color-bg: #f8f9fb;
+    --color-surface: #ffffff;
+    --color-surface-alt: #f1f3f6;
+    --color-surface-raised: #e8ecf1;
+    --color-border: #d5dbe3;
+    --color-border-subtle: #c5cdd8;
+    --color-text: #1e293b;
+    --color-text-muted: #475569;
+    --color-text-dim: #64748b;
+    --color-text-faint: #94a3b8;
+    --color-text-dark: #cbd5e1;
+    --color-accent: #2563eb;
+    --color-accent-hover: #1d4ed8;
+    --color-danger: #dc2626;
+    --color-success: #059669;
+    --color-warning: #d97706;
+    --color-hover-row: rgba(0, 0, 0, 0.03);
   }
 }

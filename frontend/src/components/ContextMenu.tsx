@@ -52,7 +52,7 @@ export default function ContextMenu({ x, y, items, onClose }: ContextMenuProps) 
     <div
       ref={menuRef}
       className="fixed z-50 min-w-[210px] bg-surface-raised border border-border-subtle rounded-md py-1"
-      style={{ left: x, top: y, boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }}
+      style={{ left: x, top: y, boxShadow: "0 8px 32px rgba(0,0,0,0.25)" }}
     >
       {items.map((item, i) =>
         item.divider ? (
@@ -61,7 +61,7 @@ export default function ContextMenu({ x, y, items, onClose }: ContextMenuProps) 
           <button
             key={i}
             className={`w-full flex items-center justify-between gap-2.5 text-[13px] text-left cursor-pointer ${
-              item.disabled ? "opacity-50 cursor-default" : "hover:bg-white/6"
+              item.disabled ? "opacity-50 cursor-default" : "hover:bg-accent/8"
             } ${item.danger ? "text-danger" : "text-text"}`}
             style={{ padding: "7px 14px" }}
             onClick={() => {

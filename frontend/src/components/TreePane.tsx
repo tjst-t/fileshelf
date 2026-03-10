@@ -57,7 +57,7 @@ function TreeItem({
         className={`flex items-center gap-1.5 cursor-pointer select-none text-[13px] transition-all duration-150 ${
           isActive
             ? "bg-accent/18 text-text border-r-2 border-accent"
-            : "text-text-muted border-r-2 border-transparent hover:bg-white/4"
+            : "text-text-muted border-r-2 border-transparent hover:bg-hover-row"
         }`}
         style={{ paddingLeft: `${depth * 16 + 8}px`, paddingTop: 4, paddingBottom: 4, paddingRight: 8 }}
         onClick={() => {

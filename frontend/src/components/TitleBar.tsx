@@ -1,8 +1,10 @@
 interface TitleBarProps {
   username: string;
+  theme: "dark" | "light";
+  onToggleTheme: () => void;
 }
 
-export default function TitleBar({ username }: TitleBarProps) {
+export default function TitleBar({ username, theme, onToggleTheme }: TitleBarProps) {
   const initial = username ? username[0].toUpperCase() : "?";
 
   return (
@@ -13,6 +15,13 @@ export default function TitleBar({ username }: TitleBarProps) {
         <span className="text-[11px] text-text-faint font-mono ml-1">v0.1.0</span>
       </div>
       <div className="flex items-center gap-3">
+        <button
+          onClick={onToggleTheme}
+          className="w-7 h-7 flex items-center justify-center rounded hover:bg-surface-raised text-text-dim hover:text-text transition-colors cursor-pointer"
+          title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+        >
+          {theme === "dark" ? "\u2600\uFE0F" : "\u{1F319}"}
+        </button>
         <span className="text-xs text-text-dim font-mono">{username}</span>
         <div className="w-7 h-7 rounded-full bg-linear-to-br from-accent to-success flex items-center justify-center text-xs font-semibold text-bg">
           {initial}

@@ -328,7 +328,7 @@ export default function FileListPane({
                   <tr
                     key={entry.name}
                     className={`cursor-pointer transition-colors duration-100 border-b border-border/50 ${
-                      isSelected ? "bg-accent/12" : "hover:bg-white/2"
+                      isSelected ? "bg-accent/12" : "hover:bg-hover-row"
                     }`}
                     style={{ opacity: isCut ? 0.4 : 1 }}
                     onClick={(e) => {
