@@ -270,11 +270,16 @@ export default function FileListPane({
       className="h-full flex flex-col overflow-hidden relative"
       onDragOver={(e) => {
         e.preventDefault();
+        e.stopPropagation();
         setDragOver(true);
       }}
-      onDragLeave={() => setDragOver(false)}
+      onDragLeave={(e) => {
+        e.stopPropagation();
+        setDragOver(false);
+      }}
       onDrop={(e) => {
         e.preventDefault();
+        e.stopPropagation();
         setDragOver(false);
         if (e.dataTransfer.files.length > 0) {
           onDrop(e.dataTransfer.files);
@@ -283,7 +288,7 @@ export default function FileListPane({
     >
       {/* Drag overlay */}
       {dragOver && (
-        <div className="absolute inset-2 bg-accent/8 border-2 border-dashed border-accent rounded-lg z-10 flex items-center justify-center text-base text-accent font-medium">
+        <div className="absolute inset-2 bg-accent/8 border-2 border-dashed border-accent rounded-lg z-10 flex items-center justify-center text-base text-accent font-medium pointer-events-none">
           Drop files to upload
         </div>
       )}
