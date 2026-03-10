@@ -8,6 +8,7 @@ import PreviewPane from "./components/PreviewPane";
 import StatusBar from "./components/StatusBar";
 import Toast from "./components/Toast";
 import DeleteDialog from "./components/DeleteDialog";
+import ResizeHandle from "./components/ResizeHandle";
 
 export default function App() {
   const {
@@ -23,6 +24,7 @@ export default function App() {
     goUp,
     refresh,
     toggleSelect,
+    selectRange,
     selectAll,
     clearSelection,
     handleCopy,
@@ -37,10 +39,20 @@ export default function App() {
   const [showPreview, setShowPreview] = useState(false);
   const [previewEntry, setPreviewEntry] = useState<FileEntry | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [treePaneWidth, setTreePaneWidth] = useState(208);
+  const [previewPaneWidth, setPreviewPaneWidth] = useState(288);
 
   const handlePreview = useCallback((entry: FileEntry) => {
     setPreviewEntry(entry);
     setShowPreview(true);
+  }, []);
+
+  const handleTreeResize = useCallback((delta: number) => {
+    setTreePaneWidth((w) => Math.max(120, Math.min(500, w + delta)));
+  }, []);
+
+  const handlePreviewResize = useCallback((delta: number) => {
+    setPreviewPaneWidth((w) => Math.max(200, Math.min(600, w - delta)));
   }, []);
 
   // Keyboard shortcuts
@@ -104,9 +116,11 @@ export default function App() {
       {/* Main content */}
       <div className="flex-1 flex overflow-hidden">
         {/* Tree pane */}
-        <div className="w-52 flex-shrink-0">
+        <div className="flex-shrink-0" style={{ width: treePaneWidth }}>
           <TreePane shares={shares} currentPath={currentPath} onNavigate={navigate} />
         </div>
+
+        <ResizeHandle onResize={handleTreeResize} />
 
         {/* File list */}
         <div className="flex-1 min-w-0">
@@ -118,20 +132,29 @@ export default function App() {
               selected={selected}
               currentPath={currentPath}
               loading={loading}
+              clipboard={clipboard}
               onNavigate={navigate}
               onSelect={toggleSelect}
+              onSelectRange={selectRange}
               onPreview={handlePreview}
               onRename={handleRename}
               onDrop={handleUpload}
+              onCopy={handleCopy}
+              onCut={handleCut}
+              onPaste={handlePaste}
+              onDelete={() => setShowDeleteDialog(true)}
             />
           )}
         </div>
 
         {/* Preview pane */}
         {showPreview && (
-          <div className="w-72 flex-shrink-0">
-            <PreviewPane entry={previewEntry} currentPath={currentPath} />
-          </div>
+          <>
+            <ResizeHandle onResize={handlePreviewResize} />
+            <div className="flex-shrink-0" style={{ width: previewPaneWidth }}>
+              <PreviewPane entry={previewEntry} currentPath={currentPath} />
+            </div>
+          </>
         )}
       </div>
 

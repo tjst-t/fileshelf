@@ -86,6 +86,22 @@ export function useFileExplorer() {
     setSelected(new Set(entries.map((e) => e.name)));
   }, [entries]);
 
+  const selectRange = useCallback(
+    (name: string) => {
+      setSelected((prev) => {
+        const names = entries.map((e) => e.name);
+        if (prev.size === 0) return new Set([name]);
+        const last = Array.from(prev).pop()!;
+        const from = names.indexOf(last);
+        const to = names.indexOf(name);
+        if (from === -1 || to === -1) return new Set([name]);
+        const [s, e] = from < to ? [from, to] : [to, from];
+        return new Set([...prev, ...names.slice(s, e + 1)]);
+      });
+    },
+    [entries]
+  );
+
   const clearSelection = useCallback(() => {
     setSelected(new Set());
   }, []);
@@ -207,6 +223,7 @@ export function useFileExplorer() {
     goUp,
     refresh,
     toggleSelect,
+    selectRange,
     selectAll,
     clearSelection,
     handleCopy,

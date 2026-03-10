@@ -1,17 +1,26 @@
 import { useState, useCallback } from "react";
 import type { FileEntry } from "../api/client";
+import type { ClipboardState } from "../hooks/useFileExplorer";
 import { formatSize } from "../utils/format";
+import ContextMenu from "./ContextMenu";
+import type { ContextMenuItem } from "./ContextMenu";
 
 interface FileListPaneProps {
   entries: FileEntry[];
   selected: Set<string>;
   currentPath: string;
   loading: boolean;
+  clipboard: ClipboardState | null;
   onNavigate: (path: string) => void;
   onSelect: (name: string, multi: boolean) => void;
+  onSelectRange: (name: string) => void;
   onPreview: (entry: FileEntry) => void;
   onRename: (oldName: string, newName: string) => void;
   onDrop: (files: FileList) => void;
+  onCopy: () => void;
+  onCut: () => void;
+  onPaste: () => void;
+  onDelete: () => void;
 }
 
 type SortKey = "name" | "size" | "modified" | "perms";
@@ -48,17 +57,24 @@ export default function FileListPane({
   selected,
   currentPath,
   loading,
+  clipboard,
   onNavigate,
   onSelect,
+  onSelectRange,
   onPreview,
   onRename,
   onDrop,
+  onCopy,
+  onCut,
+  onPaste,
+  onDelete,
 }: FileListPaneProps) {
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [editName, setEditName] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [dragOver, setDragOver] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
 
   const handleSort = useCallback(
     (key: SortKey) => {
@@ -73,9 +89,7 @@ export default function FileListPane({
   );
 
   const sorted = [...entries].sort((a, b) => {
-    // Directories first
     if (a.type !== b.type) return a.type === "dir" ? -1 : 1;
-
     let cmp = 0;
     switch (sortKey) {
       case "name":
@@ -112,6 +126,64 @@ export default function FileListPane({
       onRename(editName, editValue);
     }
     setEditName(null);
+  };
+
+  const handleContextMenu = (e: React.MouseEvent, entry: FileEntry) => {
+    e.preventDefault();
+    if (!selected.has(entry.name)) {
+      onSelect(entry.name, false);
+    }
+    const multi = selected.has(entry.name) ? selected.size > 1 : false;
+
+    const items: ContextMenuItem[] = [];
+
+    if (entry.type === "dir" && !multi) {
+      items.push({
+        icon: "\u{1F4C2}",
+        label: "Open",
+        action: () => onNavigate(currentPath + "/" + entry.name),
+      });
+      items.push({ icon: "", label: "", action: () => {}, divider: true });
+    }
+
+    items.push({
+      icon: "\u{1F4CB}",
+      label: "Copy",
+      shortcut: "\u2318C",
+      action: onCopy,
+    });
+    items.push({
+      icon: "\u2702\uFE0F",
+      label: "Cut",
+      shortcut: "\u2318X",
+      action: onCut,
+    });
+    items.push({
+      icon: "\u{1F4CB}",
+      label: "Paste here",
+      shortcut: "\u2318V",
+      action: onPaste,
+      disabled: !clipboard,
+    });
+
+    items.push({ icon: "", label: "", action: () => {}, divider: true });
+
+    if (!multi) {
+      items.push({
+        icon: "\u270F\uFE0F",
+        label: "Rename",
+        action: () => startRename(entry.name),
+      });
+    }
+
+    items.push({
+      icon: "\u{1F5D1}",
+      label: multi ? `Delete ${selected.size} items` : "Delete",
+      danger: true,
+      action: onDelete,
+    });
+
+    setContextMenu({ x: e.clientX, y: e.clientY, items });
   };
 
   const sortIndicator = (key: SortKey) => {
@@ -174,13 +246,15 @@ export default function FileListPane({
                 className={`grid grid-cols-[1fr_90px_140px_90px] gap-2 px-3 py-1 text-sm cursor-pointer hover:bg-surface-alt/50 ${
                   isSelected ? "bg-surface-alt" : ""
                 }`}
-                onClick={(e) => onSelect(entry.name, e.ctrlKey || e.metaKey)}
-                onDoubleClick={() => handleDoubleClick(entry)}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  if (!isSelected) onSelect(entry.name, false);
-                  startRename(entry.name);
+                onClick={(e) => {
+                  if (e.shiftKey) {
+                    onSelectRange(entry.name);
+                  } else {
+                    onSelect(entry.name, e.ctrlKey || e.metaKey);
+                  }
                 }}
+                onDoubleClick={() => handleDoubleClick(entry)}
+                onContextMenu={(e) => handleContextMenu(e, entry)}
               >
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="flex-shrink-0">{fileIcon(entry)}</span>
@@ -212,6 +286,16 @@ export default function FileListPane({
           })
         )}
       </div>
+
+      {/* Context menu */}
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={contextMenu.items}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
     </div>
   );
 }

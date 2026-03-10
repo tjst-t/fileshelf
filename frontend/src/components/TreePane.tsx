@@ -40,7 +40,7 @@ function TreeItem({
         style={{ paddingLeft: `${depth * 16 + 8}px` }}
         onClick={() => {
           onNavigate(node.path);
-          if (!node.expanded) onToggle(node.path);
+          onToggle(node.path);
         }}
       >
         <button
@@ -96,25 +96,57 @@ export default function TreePane({ shares, currentPath, onNavigate }: TreePanePr
 
   const toggleNode = useCallback(
     async (path: string) => {
-      const updateNode = (nodes: TreeNode[]): TreeNode[] =>
-        nodes.map((n) => {
-          if (n.path === path) {
-            if (n.expanded) {
-              return { ...n, expanded: false };
-            }
-            if (n.children !== null) {
-              return { ...n, expanded: true };
-            }
-            // Load children
-            return { ...n, loading: true };
-          }
+      const findNode = (nodes: TreeNode[]): TreeNode | null => {
+        for (const n of nodes) {
+          if (n.path === path) return n;
           if (n.children) {
-            return { ...n, children: updateNode(n.children) };
+            const found = findNode(n.children);
+            if (found) return found;
           }
-          return n;
-        });
+        }
+        return null;
+      };
 
-      setNodes((prev) => updateNode(prev));
+      // Read current state synchronously via a ref-like pattern
+      let needsFetch = false;
+      setNodes((prev) => {
+        const target = findNode(prev);
+        if (!target) return prev;
+
+        if (target.expanded) {
+          // Collapse
+          const collapse = (nodes: TreeNode[]): TreeNode[] =>
+            nodes.map((n) => {
+              if (n.path === path) return { ...n, expanded: false };
+              if (n.children) return { ...n, children: collapse(n.children) };
+              return n;
+            });
+          return collapse(prev);
+        }
+
+        if (target.children !== null) {
+          // Already loaded, just expand
+          const expand = (nodes: TreeNode[]): TreeNode[] =>
+            nodes.map((n) => {
+              if (n.path === path) return { ...n, expanded: true };
+              if (n.children) return { ...n, children: expand(n.children) };
+              return n;
+            });
+          return expand(prev);
+        }
+
+        // Need to load children
+        needsFetch = true;
+        const setLoading = (nodes: TreeNode[]): TreeNode[] =>
+          nodes.map((n) => {
+            if (n.path === path) return { ...n, loading: true };
+            if (n.children) return { ...n, children: setLoading(n.children) };
+            return n;
+          });
+        return setLoading(prev);
+      });
+
+      if (!needsFetch) return;
 
       try {
         const entries: FileEntry[] = await fetchFiles(path);
@@ -129,26 +161,25 @@ export default function TreePane({ shares, currentPath, onNavigate }: TreePanePr
             loading: false,
           }));
 
-        const setChildren = (nodes: TreeNode[]): TreeNode[] =>
-          nodes.map((n) => {
-            if (n.path === path) {
-              return { ...n, children, expanded: true, loading: false };
-            }
-            if (n.children) {
-              return { ...n, children: setChildren(n.children) };
-            }
-            return n;
-          });
-
-        setNodes((prev) => setChildren(prev));
+        setNodes((prev) => {
+          const setChildren = (nodes: TreeNode[]): TreeNode[] =>
+            nodes.map((n) => {
+              if (n.path === path) return { ...n, children, expanded: true, loading: false };
+              if (n.children) return { ...n, children: setChildren(n.children) };
+              return n;
+            });
+          return setChildren(prev);
+        });
       } catch {
-        const clearLoading = (nodes: TreeNode[]): TreeNode[] =>
-          nodes.map((n) => {
-            if (n.path === path) return { ...n, loading: false };
-            if (n.children) return { ...n, children: clearLoading(n.children) };
-            return n;
-          });
-        setNodes((prev) => clearLoading(prev));
+        setNodes((prev) => {
+          const clearLoading = (nodes: TreeNode[]): TreeNode[] =>
+            nodes.map((n) => {
+              if (n.path === path) return { ...n, loading: false };
+              if (n.children) return { ...n, children: clearLoading(n.children) };
+              return n;
+            });
+          return clearLoading(prev);
+        });
       }
     },
     []
