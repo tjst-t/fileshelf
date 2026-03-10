@@ -37,7 +37,6 @@ export default function ContextMenu({ x, y, items, onClose }: ContextMenuProps) 
     };
   }, [onClose]);
 
-  // Adjust position to stay within viewport
   useEffect(() => {
     if (!menuRef.current) return;
     const rect = menuRef.current.getBoundingClientRect();
@@ -52,18 +51,19 @@ export default function ContextMenu({ x, y, items, onClose }: ContextMenuProps) 
   return (
     <div
       ref={menuRef}
-      className="fixed z-50 min-w-[200px] bg-surface border border-border rounded-lg shadow-xl py-1"
-      style={{ left: x, top: y }}
+      className="fixed z-50 min-w-[210px] bg-surface-raised border border-border-subtle rounded-md py-1"
+      style={{ left: x, top: y, boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }}
     >
       {items.map((item, i) =>
         item.divider ? (
-          <div key={i} className="h-px bg-border my-1" />
+          <div key={i} className="h-px bg-border-subtle my-1" />
         ) : (
           <button
             key={i}
-            className={`w-full flex items-center justify-between gap-3 px-3 py-1.5 text-sm text-left hover:bg-surface-alt/70 ${
-              item.disabled ? "opacity-40 cursor-default" : "cursor-pointer"
+            className={`w-full flex items-center justify-between gap-2.5 text-[13px] text-left cursor-pointer ${
+              item.disabled ? "opacity-50 cursor-default" : "hover:bg-white/6"
             } ${item.danger ? "text-danger" : "text-text"}`}
+            style={{ padding: "7px 14px" }}
             onClick={() => {
               if (!item.disabled) {
                 item.action();
@@ -73,11 +73,11 @@ export default function ContextMenu({ x, y, items, onClose }: ContextMenuProps) 
             disabled={item.disabled}
           >
             <div className="flex items-center gap-2.5">
-              <span className="w-5 text-center text-base">{item.icon}</span>
+              <span className="w-[18px] text-center text-sm">{item.icon}</span>
               <span>{item.label}</span>
             </div>
             {item.shortcut && (
-              <span className="text-xs text-text-muted font-mono">{item.shortcut}</span>
+              <span className="text-[11px] text-text-faint font-mono">{item.shortcut}</span>
             )}
           </button>
         )

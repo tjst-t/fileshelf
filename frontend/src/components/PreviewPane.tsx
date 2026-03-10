@@ -6,6 +6,7 @@ import { formatSize } from "../utils/format";
 interface PreviewPaneProps {
   entry: FileEntry | null;
   currentPath: string;
+  onClose: () => void;
 }
 
 function isText(name: string): boolean {
@@ -36,10 +37,32 @@ function isPdf(name: string): boolean {
   return name.toLowerCase().endsWith(".pdf");
 }
 
-export default function PreviewPane({ entry, currentPath }: PreviewPaneProps) {
+function fileIcon(name: string, type: string): string {
+  if (type === "dir") return "\u{1F4C1}";
+  const ext = name.split(".").pop()?.toLowerCase();
+  const icons: Record<string, string> = {
+    mp4: "\u{1F3AC}", mkv: "\u{1F3AC}", avi: "\u{1F3AC}",
+    mp3: "\u{1F3B5}", flac: "\u{1F3B5}", wav: "\u{1F3B5}",
+    jpg: "\u{1F5BC}", jpeg: "\u{1F5BC}", png: "\u{1F5BC}", gif: "\u{1F5BC}", webp: "\u{1F5BC}", svg: "\u{1F5BC}",
+    pdf: "\u{1F4C4}",
+    txt: "\u{1F4DD}", md: "\u{1F4DD}",
+    zip: "\u{1F4E6}", tar: "\u{1F4E6}", gz: "\u{1F4E6}",
+  };
+  return icons[ext || ""] || "\u{1F4C4}";
+}
+
+function formatDateLong(iso: string): string {
+  return new Date(iso).toLocaleString("ja-JP", {
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+  });
+}
+
+export default function PreviewPane({ entry, currentPath, onClose }: PreviewPaneProps) {
   if (!entry) {
     return (
-      <div className="h-full flex items-center justify-center text-text-muted text-sm bg-surface border-l border-border">
+      <div className="h-full flex flex-col items-center justify-center text-text-dark text-[13px] bg-surface border-l border-border">
+        <span className="text-[32px] mb-2">👁</span>
         Select a file to preview
       </div>
     );
@@ -48,47 +71,93 @@ export default function PreviewPane({ entry, currentPath }: PreviewPaneProps) {
   const filePath = currentPath + "/" + entry.name;
   const url = previewUrl(filePath);
   const dlUrl = downloadUrl(filePath);
+  const ext = entry.name.split(".").pop()?.toUpperCase() || "";
+
+  const infoRows = [
+    ["Path", "/" + filePath.replace(/^\/+/, "")],
+    ["Size", formatSize(entry.size)],
+    ["Modified", entry.modified ? formatDateLong(entry.modified) : "\u2014"],
+    ["Permissions", entry.perms],
+    ["Type", ext],
+  ];
 
   return (
     <div className="h-full flex flex-col bg-surface border-l border-border overflow-hidden">
-      {/* Preview area */}
-      <div className="flex-1 overflow-auto p-3 flex items-center justify-center">
-        {isImage(entry.name) ? (
-          <img src={url} alt={entry.name} className="max-w-full max-h-full object-contain" />
-        ) : isVideo(entry.name) ? (
-          <video src={url} controls className="max-w-full max-h-full" />
-        ) : isAudio(entry.name) ? (
-          <audio src={url} controls className="w-full" />
-        ) : isPdf(entry.name) ? (
-          <iframe src={url} className="w-full h-full border-0" title={entry.name} />
-        ) : isText(entry.name) ? (
-          <TextPreview url={url} />
-        ) : (
-          <div className="text-text-muted text-sm text-center">
-            <p>No preview available</p>
-            <a
-              href={dlUrl}
-              className="text-accent hover:text-accent-hover underline mt-2 inline-block"
-            >
-              Download file
-            </a>
-          </div>
-        )}
+      {/* Header */}
+      <div className="px-3.5 py-3 border-b border-border flex items-center justify-between">
+        <span className="text-xs font-semibold text-text-muted uppercase tracking-[0.05em]">Preview</span>
+        <button
+          onClick={onClose}
+          className="text-text-dim hover:text-text cursor-pointer text-base leading-none px-1"
+        >
+          ×
+        </button>
       </div>
 
-      {/* File info */}
-      <div className="border-t border-border px-3 py-2 text-xs text-text-muted space-y-1">
-        <div className="font-medium text-text truncate">{entry.name}</div>
-        <div>Type: {entry.type}</div>
-        <div>Size: {formatSize(entry.size)}</div>
-        <div>Modified: {new Date(entry.modified).toLocaleString()}</div>
-        <div>Permissions: <code className="font-mono">{entry.perms}</code></div>
-        <a
-          href={dlUrl}
-          className="text-accent hover:text-accent-hover underline inline-block mt-1"
-        >
-          Download
-        </a>
+      {/* Content */}
+      <div className="flex-1 overflow-auto p-3.5">
+        {/* File icon + name */}
+        <div className="text-center pt-4 pb-5">
+          <div className="text-5xl mb-2">{fileIcon(entry.name, entry.type)}</div>
+          <div className="text-sm font-medium text-text break-all leading-snug">{entry.name}</div>
+        </div>
+
+        {/* Preview area */}
+        <div className="mb-4">
+          {isImage(entry.name) ? (
+            <div className="bg-surface-raised rounded-md p-3 flex items-center justify-center min-h-[140px]">
+              <img src={url} alt={entry.name} className="max-w-full max-h-full object-contain rounded" />
+            </div>
+          ) : isVideo(entry.name) ? (
+            <div className="bg-surface-raised rounded-md p-3 flex items-center justify-center min-h-[140px]">
+              <video src={url} controls className="max-w-full max-h-full" />
+            </div>
+          ) : isAudio(entry.name) ? (
+            <div className="bg-surface-raised rounded-md p-4 flex flex-col items-center gap-2">
+              <span className="text-3xl">🎵</span>
+              <audio src={url} controls className="w-full" />
+            </div>
+          ) : isPdf(entry.name) ? (
+            <div className="bg-surface-raised rounded-md p-4 text-center text-text-faint text-xs">
+              <span className="text-3xl block mb-2">📄</span>
+              PDF preview will open in browser viewer
+            </div>
+          ) : isText(entry.name) ? (
+            <div className="bg-surface-raised rounded-md p-3 min-h-[80px]">
+              <TextPreview url={url} />
+            </div>
+          ) : (
+            <div className="bg-surface-raised rounded-md p-4 text-center text-text-faint text-xs">
+              No preview available for this file type
+            </div>
+          )}
+        </div>
+
+        {/* File info */}
+        <div className="text-xs text-text-dim">
+          {infoRows.map(([label, value]) => (
+            <div key={label} className="flex justify-between py-1.5 border-b border-border/60">
+              <span className="text-text-faint">{label}</span>
+              <span className="text-text-muted font-mono text-[11px] text-right max-w-[60%] break-all">{value}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Actions */}
+        <div className="mt-4 flex flex-col gap-1.5">
+          <a
+            href={dlUrl}
+            className="block w-full text-center bg-accent/15 border border-accent/30 rounded-[5px] text-accent text-xs py-2 hover:bg-accent/25 no-underline"
+          >
+            ⬇ Download
+          </a>
+          <button
+            className="w-full border border-border-subtle rounded-[5px] text-text-muted text-xs py-2 cursor-pointer hover:bg-surface-raised bg-transparent"
+            onClick={() => navigator.clipboard?.writeText("/" + filePath.replace(/^\/+/, ""))}
+          >
+            📋 Copy path
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -110,11 +179,11 @@ function TextPreview({ url }: { url: string }) {
       .catch((e) => setError(e.message));
   }, [url]);
 
-  if (error) return <div className="text-danger text-sm">Error: {error}</div>;
-  if (content === null) return <div className="text-text-muted text-sm">Loading...</div>;
+  if (error) return <div className="text-danger text-xs">Error: {error}</div>;
+  if (content === null) return <div className="text-text-muted text-xs">Loading...</div>;
 
   return (
-    <pre className="w-full h-full overflow-auto text-xs font-mono text-text whitespace-pre-wrap break-all p-2 bg-bg rounded">
+    <pre className="font-mono text-[11px] leading-relaxed text-text-muted whitespace-pre-wrap break-all max-h-[200px] overflow-auto">
       {content}
     </pre>
   );

@@ -31,34 +31,37 @@ function TreeItem({
 }) {
   const isActive = currentPath === node.path;
 
+  const hasChildren = node.children === null || (node.children && node.children.length > 0);
+
   return (
     <div>
       <div
-        className={`flex items-center gap-1 px-2 py-1 cursor-pointer text-sm hover:bg-surface-alt/50 ${
-          isActive ? "bg-surface-alt text-accent" : "text-text"
+        className={`flex items-center gap-1.5 cursor-pointer select-none text-[13px] transition-all duration-150 ${
+          isActive
+            ? "bg-accent/18 text-text border-r-2 border-accent"
+            : "text-text-muted border-r-2 border-transparent hover:bg-white/4"
         }`}
-        style={{ paddingLeft: `${depth * 16 + 8}px` }}
+        style={{ paddingLeft: `${depth * 16 + 8}px`, paddingTop: 4, paddingBottom: 4, paddingRight: 8 }}
         onClick={() => {
           onNavigate(node.path);
           onToggle(node.path);
         }}
       >
-        <button
-          className="w-4 h-4 flex items-center justify-center text-text-muted flex-shrink-0"
+        <span
+          className="w-3.5 text-center text-text-dim flex-shrink-0 inline-block transition-transform duration-150"
+          style={{
+            fontSize: 10,
+            transform: node.expanded ? "rotate(90deg)" : "rotate(0deg)",
+            visibility: hasChildren ? "visible" : "hidden",
+          }}
           onClick={(e) => {
             e.stopPropagation();
             onToggle(node.path);
           }}
         >
-          {node.loading ? (
-            <span className="animate-spin">{"\u21BB"}</span>
-          ) : node.expanded ? (
-            "\u25BE"
-          ) : (
-            "\u25B8"
-          )}
-        </button>
-        <span className="mr-1">{"\uD83D\uDCC1"}</span>
+          {node.loading ? "\u21BB" : "\u25B6"}
+        </span>
+        <span className="text-sm">{node.expanded ? "\uD83D\uDCC2" : "\uD83D\uDCC1"}</span>
         <span className="truncate">{node.name}</span>
       </div>
       {node.expanded && node.children && (
@@ -187,7 +190,7 @@ export default function TreePane({ shares, currentPath, onNavigate }: TreePanePr
 
   return (
     <div className="h-full overflow-y-auto bg-surface border-r border-border">
-      <div className="px-3 py-2 text-xs font-semibold text-text-muted uppercase tracking-wider border-b border-border">
+      <div className="px-3 py-2 text-[10px] font-semibold text-text-faint uppercase tracking-[0.1em] border-b border-border">
         Shares
       </div>
       {nodes.map((node) => (

@@ -1,11 +1,13 @@
 import { useState, useCallback, useEffect } from "react";
 import type { FileEntry } from "./api/client";
 import { useFileExplorer } from "./hooks/useFileExplorer";
+import TitleBar from "./components/TitleBar";
 import TreePane from "./components/TreePane";
 import Toolbar from "./components/Toolbar";
 import FileListPane from "./components/FileListPane";
 import PreviewPane from "./components/PreviewPane";
 import StatusBar from "./components/StatusBar";
+import ClipboardBar from "./components/ClipboardBar";
 import Toast from "./components/Toast";
 import DeleteDialog from "./components/DeleteDialog";
 import ResizeHandle from "./components/ResizeHandle";
@@ -22,7 +24,6 @@ export default function App() {
     toast,
     navigate,
     goUp,
-    refresh,
     toggleSelect,
     selectRange,
     selectAll,
@@ -34,13 +35,14 @@ export default function App() {
     handleMkdir,
     handleRename,
     handleUpload,
+    clearClipboard,
   } = useFileExplorer();
 
   const [showPreview, setShowPreview] = useState(false);
   const [previewEntry, setPreviewEntry] = useState<FileEntry | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [treePaneWidth, setTreePaneWidth] = useState(208);
-  const [previewPaneWidth, setPreviewPaneWidth] = useState(288);
+  const [treePaneWidth, setTreePaneWidth] = useState(240);
+  const [previewPaneWidth, setPreviewPaneWidth] = useState(320);
 
   const handlePreview = useCallback((entry: FileEntry) => {
     setPreviewEntry(entry);
@@ -48,11 +50,11 @@ export default function App() {
   }, []);
 
   const handleTreeResize = useCallback((delta: number) => {
-    setTreePaneWidth((w) => Math.max(120, Math.min(500, w + delta)));
+    setTreePaneWidth((w) => Math.max(140, Math.min(500, w + delta)));
   }, []);
 
   const handlePreviewResize = useCallback((delta: number) => {
-    setPreviewPaneWidth((w) => Math.max(200, Math.min(600, w - delta)));
+    setPreviewPaneWidth((w) => Math.max(220, Math.min(600, w - delta)));
   }, []);
 
   // Keyboard shortcuts
@@ -101,6 +103,9 @@ export default function App() {
 
   return (
     <div className="h-full flex flex-col">
+      {/* Title bar */}
+      <TitleBar username="tjstkm" />
+
       {/* Toolbar */}
       <Toolbar
         currentPath={currentPath}
@@ -108,10 +113,18 @@ export default function App() {
         onGoUp={goUp}
         onNewFolder={handleMkdir}
         onUpload={handleUpload}
-        onRefresh={refresh}
         showPreview={showPreview}
         onTogglePreview={() => setShowPreview((p) => !p)}
       />
+
+      {/* Clipboard bar */}
+      {clipboard && (
+        <ClipboardBar
+          clipboard={clipboard}
+          onPaste={handlePaste}
+          onCancel={clearClipboard}
+        />
+      )}
 
       {/* Main content */}
       <div className="flex-1 flex overflow-hidden">
@@ -123,7 +136,7 @@ export default function App() {
         <ResizeHandle onResize={handleTreeResize} />
 
         {/* File list */}
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 flex flex-col">
           {error ? (
             <div className="flex items-center justify-center h-full text-danger text-sm">{error}</div>
           ) : (
@@ -152,14 +165,18 @@ export default function App() {
           <>
             <ResizeHandle onResize={handlePreviewResize} />
             <div className="flex-shrink-0" style={{ width: previewPaneWidth }}>
-              <PreviewPane entry={previewEntry} currentPath={currentPath} />
+              <PreviewPane
+                entry={previewEntry}
+                currentPath={currentPath}
+                onClose={() => setShowPreview(false)}
+              />
             </div>
           </>
         )}
       </div>
 
       {/* Status bar */}
-      <StatusBar entries={entries} selected={selected} clipboard={clipboard} onPaste={handlePaste} />
+      <StatusBar entries={entries} selected={selected} />
 
       {/* Toast */}
       {toast && <Toast message={toast.message} type={toast.type} />}

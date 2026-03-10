@@ -106,6 +106,10 @@ export function useFileExplorer() {
     setSelected(new Set());
   }, []);
 
+  const clearClipboard = useCallback(() => {
+    setClipboard(null);
+  }, []);
+
   const handleCopy = useCallback(() => {
     if (selected.size === 0) return;
     setClipboard({
@@ -233,5 +237,6 @@ export function useFileExplorer() {
     handleMkdir,
     handleRename,
     handleUpload,
+    clearClipboard,
   };
 }

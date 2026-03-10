@@ -193,15 +193,16 @@ export default function FileListPane({
 
   if (!currentPath) {
     return (
-      <div className="flex items-center justify-center h-full text-text-muted text-sm">
-        Select a share from the sidebar
+      <div className="flex flex-col items-center justify-center h-full text-text-dark gap-2">
+        <span className="text-4xl">📚</span>
+        <span className="text-sm">Select a share from the tree</span>
       </div>
     );
   }
 
   return (
     <div
-      className={`h-full flex flex-col overflow-hidden ${dragOver ? "ring-2 ring-accent ring-inset" : ""}`}
+      className="h-full flex flex-col overflow-hidden relative"
       onDragOver={(e) => {
         e.preventDefault();
         setDragOver(true);
@@ -215,76 +216,105 @@ export default function FileListPane({
         }
       }}
     >
-      {/* Header */}
-      <div className="grid grid-cols-[1fr_90px_140px_90px] gap-2 px-3 py-1.5 text-xs font-semibold text-text-muted uppercase tracking-wider border-b border-border bg-surface select-none">
-        <button className="text-left hover:text-text" onClick={() => handleSort("name")}>
-          Name{sortIndicator("name")}
-        </button>
-        <button className="text-right hover:text-text" onClick={() => handleSort("size")}>
-          Size{sortIndicator("size")}
-        </button>
-        <button className="text-right hover:text-text" onClick={() => handleSort("modified")}>
-          Modified{sortIndicator("modified")}
-        </button>
-        <button className="text-left hover:text-text" onClick={() => handleSort("perms")}>
-          Perms{sortIndicator("perms")}
-        </button>
-      </div>
+      {/* Drag overlay */}
+      {dragOver && (
+        <div className="absolute inset-2 bg-accent/8 border-2 border-dashed border-accent rounded-lg z-10 flex items-center justify-center text-base text-accent font-medium">
+          Drop files to upload
+        </div>
+      )}
 
-      {/* List */}
-      <div className="flex-1 overflow-y-auto">
-        {loading ? (
-          <div className="flex items-center justify-center py-8 text-text-muted text-sm">Loading...</div>
-        ) : sorted.length === 0 ? (
-          <div className="flex items-center justify-center py-8 text-text-muted text-sm">Empty directory</div>
-        ) : (
-          sorted.map((entry) => {
-            const isSelected = selected.has(entry.name);
-            return (
-              <div
-                key={entry.name}
-                className={`grid grid-cols-[1fr_90px_140px_90px] gap-2 px-3 py-1 text-sm cursor-pointer hover:bg-surface-alt/50 ${
-                  isSelected ? "bg-surface-alt" : ""
-                }`}
-                onClick={(e) => {
-                  if (e.shiftKey) {
-                    onSelectRange(entry.name);
-                  } else {
-                    onSelect(entry.name, e.ctrlKey || e.metaKey);
-                  }
-                }}
-                onDoubleClick={() => handleDoubleClick(entry)}
-                onContextMenu={(e) => handleContextMenu(e, entry)}
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="flex-shrink-0">{fileIcon(entry)}</span>
-                  {editName === entry.name ? (
-                    <input
-                      className="flex-1 bg-bg border border-accent rounded px-1 py-0.5 text-sm text-text focus:outline-none"
-                      value={editValue}
-                      onChange={(e) => setEditValue(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") commitRename();
-                        if (e.key === "Escape") setEditName(null);
-                      }}
-                      onBlur={commitRename}
-                      autoFocus
-                    />
-                  ) : (
-                    <span className="truncate">{entry.name}</span>
-                  )}
-                </div>
-                <div className="text-right text-text-muted font-mono text-xs self-center">
-                  {entry.type === "dir" ? "-" : formatSize(entry.size)}
-                </div>
-                <div className="text-right text-text-muted text-xs self-center">
-                  {formatDate(entry.modified)}
-                </div>
-                <div className="text-text-muted font-mono text-xs self-center">{entry.perms}</div>
-              </div>
-            );
-          })
-        )}
+      {/* Table */}
+      <div className="flex-1 overflow-auto">
+        <table className="w-full border-collapse table-fixed">
+          <thead className="sticky top-0 bg-surface-alt z-[2]">
+            <tr>
+              {([
+                { key: "name" as SortKey, label: "Name", align: "text-left", width: "w-[45%]" },
+                { key: "size" as SortKey, label: "Size", align: "text-right", width: "w-[15%]" },
+                { key: "modified" as SortKey, label: "Modified", align: "text-left", width: "w-[22%]" },
+                { key: "perms" as SortKey, label: "Perms", align: "text-left", width: "w-[18%]" },
+              ]).map((col) => (
+                <th
+                  key={col.key}
+                  className={`px-3 py-2 text-[11px] uppercase tracking-[0.05em] font-semibold select-none whitespace-nowrap border-b border-border cursor-pointer ${col.align} ${col.width} ${
+                    sortKey === col.key ? "text-text bg-accent/6" : "text-text-dim"
+                  } hover:text-text`}
+                  onClick={() => handleSort(col.key)}
+                >
+                  {col.label}{sortIndicator(col.key)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan={4} className="py-8 text-center text-text-muted text-sm">Loading...</td>
+              </tr>
+            ) : sorted.length === 0 ? (
+              <tr>
+                <td colSpan={4} className="py-10 text-center text-text-dark text-sm">Empty directory</td>
+              </tr>
+            ) : (
+              sorted.map((entry) => {
+                const isSelected = selected.has(entry.name);
+                const isCut = clipboard?.mode === "cut" && clipboard.entries.some((e) => e.name === entry.name);
+                return (
+                  <tr
+                    key={entry.name}
+                    className={`cursor-pointer transition-colors duration-100 border-b border-border/50 ${
+                      isSelected ? "bg-accent/12" : "hover:bg-white/2"
+                    }`}
+                    style={{ opacity: isCut ? 0.4 : 1 }}
+                    onClick={(e) => {
+                      if (e.shiftKey) {
+                        onSelectRange(entry.name);
+                      } else {
+                        onSelect(entry.name, e.ctrlKey || e.metaKey);
+                      }
+                    }}
+                    onDoubleClick={() => handleDoubleClick(entry)}
+                    onContextMenu={(e) => handleContextMenu(e, entry)}
+                  >
+                    <td className="px-3 py-1.5 text-[13px]">
+                      <div className="flex items-center gap-2 overflow-hidden">
+                        <span className="flex-shrink-0 text-[15px]">{fileIcon(entry)}</span>
+                        {editName === entry.name ? (
+                          <input
+                            className="flex-1 bg-bg border border-accent rounded px-1 py-0.5 text-sm text-text focus:outline-none"
+                            value={editValue}
+                            onChange={(e) => setEditValue(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") commitRename();
+                              if (e.key === "Escape") setEditName(null);
+                            }}
+                            onBlur={commitRename}
+                            autoFocus
+                          />
+                        ) : (
+                          <span
+                            className={`truncate ${entry.type === "dir" ? "text-accent" : "text-text"}`}
+                          >
+                            {entry.name}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-3 py-1.5 text-right text-text-dim font-mono text-xs">
+                      {entry.type === "dir" ? "\u2014" : formatSize(entry.size)}
+                    </td>
+                    <td className="px-3 py-1.5 text-text-dim font-mono text-xs">
+                      {formatDate(entry.modified)}
+                    </td>
+                    <td className="px-3 py-1.5 text-text-faint font-mono text-xs">
+                      {entry.perms}
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
       </div>
 
       {/* Context menu */}
