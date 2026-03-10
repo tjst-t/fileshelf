@@ -1,7 +1,7 @@
 server:
   listen: ":8080"
   dev_mode: true
-  dev_user: "tjstkm"
+  dev_user: "ubuntu"
   static_dir: "./frontend/dist"
 
 helper:
@@ -9,9 +9,5 @@ helper:
   timeout: 30s
 
 shares:
-  - name: "media"
-    path: "/tank/media"
-  - name: "documents"
-    path: "/tank/documents"
-  - name: "backups"
-    path: "/tank/backups"
+  - name: "home"
+    path: "/home/ubuntu"

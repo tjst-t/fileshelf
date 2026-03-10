@@ -20,7 +20,7 @@ build-frontend:
 	cd $(FRONTEND_DIR) && npm ci && npm run build
 
 dev:
-	FILESHELF_DEV=1 go run ./cmd/server -config config.yaml
+	FILESHELF_DEV=1 go run -ldflags "$(LDFLAGS)" ./cmd/server -config config.yaml
 
 PID_FILE := /tmp/fileshelf-dev.pid
 LOG_FILE := /tmp/fileshelf-dev.log
