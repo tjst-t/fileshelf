@@ -9,6 +9,8 @@ import (
 	"syscall"
 )
 
+var okResult = map[string]bool{"ok": true}
+
 // AllowedOps is the set of valid operations.
 var AllowedOps = map[string]bool{
 	"access": true,
@@ -36,19 +38,19 @@ type Params struct {
 // Returns the exit code.
 func Run(p Params, stdin io.Reader, stdout, stderr io.Writer) int {
 	if !AllowedOps[p.Op] {
-		writeError(stderr, fmt.Sprintf("unknown operation: %s", p.Op), ExitBadArgs)
+		writeError(stderr, fmt.Sprintf("unknown operation: %s", p.Op))
 		return ExitBadArgs
 	}
 
 	if p.UID == 0 {
-		writeError(stderr, "refusing to run as uid=0 (root)", ExitSecurity)
+		writeError(stderr, "refusing to run as uid=0 (root)")
 		return ExitSecurity
 	}
 
 	// Validate path
 	cleanPath, err := ValidatePath(p.Path, p.Bases)
 	if err != nil {
-		writeError(stderr, err.Error(), ExitSecurity)
+		writeError(stderr, err.Error())
 		return ExitSecurity
 	}
 	p.Path = cleanPath
@@ -56,12 +58,12 @@ func Run(p Params, stdin io.Reader, stdout, stderr io.Writer) int {
 	// Validate dest if needed
 	if p.Op == "rename" || p.Op == "copy" {
 		if p.Dest == "" {
-			writeError(stderr, "dest is required for "+p.Op, ExitBadArgs)
+			writeError(stderr, "dest is required for "+p.Op)
 			return ExitBadArgs
 		}
-		cleanDest, err := ValidateDestPath(p.Dest, p.Bases)
+		cleanDest, err := ValidatePath(p.Dest, p.Bases)
 		if err != nil {
-			writeError(stderr, err.Error(), ExitSecurity)
+			writeError(stderr, err.Error())
 			return ExitSecurity
 		}
 		p.Dest = cleanDest
@@ -76,7 +78,7 @@ func execute(p Params, stdin io.Reader, stdout, stderr io.Writer) int {
 		if err := OpAccess(p.Path); err != nil {
 			return writeOpError(stderr, err)
 		}
-		writeJSON(stdout, map[string]bool{"ok": true})
+		writeJSON(stdout, okResult)
 		return ExitOK
 
 	case "list":
@@ -89,43 +91,45 @@ func execute(p Params, stdin io.Reader, stdout, stderr io.Writer) int {
 
 	case "read":
 		if err := OpRead(p.Path, stdout); err != nil {
+			// read errors go to stderr since stdout is the binary stream
 			return writeOpError(stderr, err)
 		}
 		return ExitOK
 
 	case "write":
-		if err := OpWrite(p.Path, stdin); err != nil {
+		resp, err := OpWrite(p.Path, stdin)
+		if err != nil {
 			return writeOpError(stderr, err)
 		}
-		writeJSON(stdout, map[string]bool{"ok": true})
+		writeJSON(stdout, resp)
 		return ExitOK
 
 	case "mkdir":
 		if err := OpMkdir(p.Path); err != nil {
 			return writeOpError(stderr, err)
 		}
-		writeJSON(stdout, map[string]bool{"ok": true})
+		writeJSON(stdout, okResult)
 		return ExitOK
 
 	case "delete":
-		if err := OpDelete(p.Path); err != nil {
+		if err := OpDelete(p.Path, p.Bases); err != nil {
 			return writeOpError(stderr, err)
 		}
-		writeJSON(stdout, map[string]bool{"ok": true})
+		writeJSON(stdout, okResult)
 		return ExitOK
 
 	case "rename":
 		if err := OpRename(p.Path, p.Dest); err != nil {
 			return writeOpError(stderr, err)
 		}
-		writeJSON(stdout, map[string]bool{"ok": true})
+		writeJSON(stdout, okResult)
 		return ExitOK
 
 	case "copy":
 		if err := OpCopy(p.Path, p.Dest); err != nil {
 			return writeOpError(stderr, err)
 		}
-		writeJSON(stdout, map[string]bool{"ok": true})
+		writeJSON(stdout, okResult)
 		return ExitOK
 
 	case "stat":
@@ -137,29 +141,28 @@ func execute(p Params, stdin io.Reader, stdout, stderr io.Writer) int {
 		return ExitOK
 
 	default:
-		writeError(stderr, "unknown operation: "+p.Op, ExitBadArgs)
+		writeError(stderr, "unknown operation: "+p.Op)
 		return ExitBadArgs
 	}
 }
 
 func writeJSON(w io.Writer, v interface{}) {
-	enc := json.NewEncoder(w)
-	enc.Encode(v)
+	json.NewEncoder(w).Encode(v)
 }
 
-func writeError(w io.Writer, msg string, _ int) {
+func writeError(w io.Writer, msg string) {
 	writeJSON(w, ErrorResponse{Error: msg})
 }
 
 func writeOpError(w io.Writer, err error) int {
 	code := classifyError(err)
-	writeError(w, err.Error(), code)
+	writeError(w, err.Error())
 	return code
 }
 
 func classifyError(err error) int {
 	if errors.Is(err, os.ErrPermission) {
-		return ExitPermisson
+		return ExitPerm
 	}
 	if errors.Is(err, os.ErrNotExist) {
 		return ExitNotFound
@@ -171,12 +174,12 @@ func classifyError(err error) int {
 	if errors.As(err, &errno) {
 		switch errno {
 		case syscall.EACCES, syscall.EPERM:
-			return ExitPermisson
+			return ExitPerm
 		case syscall.ENOENT:
 			return ExitNotFound
 		case syscall.EEXIST:
 			return ExitExists
 		}
 	}
-	return ExitInternal
+	return ExitGeneral
 }

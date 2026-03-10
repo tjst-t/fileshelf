@@ -1,6 +1,10 @@
 package helper
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestValidatePath(t *testing.T) {
 	bases := []string{"/tank/media", "/tank/documents"}
@@ -41,5 +45,55 @@ func TestValidatePath(t *testing.T) {
 				t.Errorf("got %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestValidatePathSymlink(t *testing.T) {
+	// Create a real directory structure with symlinks
+	base := t.TempDir()
+	realDir := filepath.Join(base, "real")
+	os.Mkdir(realDir, 0755)
+	os.WriteFile(filepath.Join(realDir, "file.txt"), []byte("test"), 0644)
+
+	// Create a symlink inside base pointing within base — should be OK
+	symInside := filepath.Join(base, "link-inside")
+	os.Symlink(realDir, symInside)
+
+	// Create a directory outside base
+	outside := t.TempDir()
+	os.WriteFile(filepath.Join(outside, "secret.txt"), []byte("secret"), 0644)
+
+	// Create a symlink inside base pointing outside — should be rejected
+	symOutside := filepath.Join(base, "link-outside")
+	os.Symlink(outside, symOutside)
+
+	bases := []string{base}
+
+	t.Run("symlink within base", func(t *testing.T) {
+		_, err := ValidatePath(filepath.Join(symInside, "file.txt"), bases)
+		if err != nil {
+			t.Errorf("expected valid, got error: %v", err)
+		}
+	})
+
+	t.Run("symlink escaping base", func(t *testing.T) {
+		_, err := ValidatePath(filepath.Join(symOutside, "secret.txt"), bases)
+		if err == nil {
+			t.Error("expected error for symlink escaping base")
+		}
+	})
+}
+
+func TestIsBasePath(t *testing.T) {
+	bases := []string{"/tank/media", "/tank/docs"}
+
+	if !IsBasePath("/tank/media", bases) {
+		t.Error("expected true for base path")
+	}
+	if IsBasePath("/tank/media/sub", bases) {
+		t.Error("expected false for sub path")
+	}
+	if IsBasePath("/etc", bases) {
+		t.Error("expected false for unrelated path")
 	}
 }

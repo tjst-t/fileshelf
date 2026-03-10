@@ -9,6 +9,8 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/tjst-t/fileshelf/internal/helper"
 )
 
 // ForkFileOperator implements FileOperator by forking the helper binary per request.
@@ -185,17 +187,17 @@ func (e *HelperError) Error() string {
 
 // IsPermission returns true if the error is a permission error.
 func (e *HelperError) IsPermission() bool {
-	return e.ExitCode == 3
+	return e.ExitCode == helper.ExitPerm
 }
 
 // IsNotFound returns true if the error is a not found error.
 func (e *HelperError) IsNotFound() bool {
-	return e.ExitCode == 4
+	return e.ExitCode == helper.ExitNotFound
 }
 
 // IsExists returns true if the error is an already exists error.
 func (e *HelperError) IsExists() bool {
-	return e.ExitCode == 5
+	return e.ExitCode == helper.ExitExists
 }
 
 // readCloser wraps a ReadCloser and waits for the command to finish on Close.
@@ -208,10 +210,10 @@ type readCloser struct {
 
 func (r *readCloser) Close() error {
 	defer r.cancel()
-	r.ReadCloser.Close()
-	err := r.cmd.Wait()
-	if err != nil {
-		return fmt.Errorf("helper read error: %w (stderr: %s)", err, r.stderr.String())
+	pipeErr := r.ReadCloser.Close()
+	waitErr := r.cmd.Wait()
+	if waitErr != nil {
+		return fmt.Errorf("helper read error: %w (stderr: %s)", waitErr, r.stderr.String())
 	}
-	return nil
+	return pipeErr
 }

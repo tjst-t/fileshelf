@@ -18,12 +18,17 @@ import (
 
 func main() {
 	configPath := flag.String("config", "config.yaml", "path to config file")
+	port := flag.Int("port", 0, "override listen port (e.g. 8080)")
 	flag.Parse()
 
 	cfg, err := config.Load(*configPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error loading config: %v\n", err)
 		os.Exit(1)
+	}
+
+	if *port > 0 {
+		cfg.Server.Listen = fmt.Sprintf(":%d", *port)
 	}
 
 	fop := &fileop.ForkFileOperator{

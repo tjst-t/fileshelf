@@ -248,7 +248,7 @@ func TestHandleFilesCopy(t *testing.T) {
 
 func TestHandleHelperPermissionError(t *testing.T) {
 	mock := &mockFileOperator{
-		listErr: &fileop.HelperError{Message: "permission denied", ExitCode: 3},
+		listErr: &fileop.HelperError{Message: "permission denied", ExitCode: 1},
 	}
 	h := &Handlers{FileOp: mock, Config: testConfig()}
 
@@ -265,7 +265,7 @@ func TestHandleHelperPermissionError(t *testing.T) {
 
 func TestHandleHelperNotFoundError(t *testing.T) {
 	mock := &mockFileOperator{
-		statErr: &fileop.HelperError{Message: "not found", ExitCode: 4},
+		statErr: &fileop.HelperError{Message: "not found", ExitCode: 2},
 	}
 	h := &Handlers{FileOp: mock, Config: testConfig()}
 

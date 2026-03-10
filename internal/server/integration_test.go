@@ -22,7 +22,7 @@ type accessFilterMock struct {
 
 func (m *accessFilterMock) Access(_ context.Context, _ fileop.User, path string) error {
 	if m.denyPaths[path] {
-		return &fileop.HelperError{Message: "access denied", ExitCode: 3}
+		return &fileop.HelperError{Message: "access denied", ExitCode: 1}
 	}
 	return nil
 }
@@ -208,7 +208,7 @@ func TestIntegrationFullRouter(t *testing.T) {
 
 func TestIntegrationPermissionErrorFlow(t *testing.T) {
 	mock := &mockFileOperator{
-		listErr: &fileop.HelperError{Message: "permission denied", ExitCode: 3},
+		listErr: &fileop.HelperError{Message: "permission denied", ExitCode: 1},
 	}
 	cfg := testConfig()
 	h := &Handlers{FileOp: mock, Config: cfg}

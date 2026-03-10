@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import type { FileEntry } from "../api/client";
+import { formatSize } from "../utils/format";
 
 interface FileListPaneProps {
   entries: FileEntry[];
@@ -15,13 +16,6 @@ interface FileListPaneProps {
 
 type SortKey = "name" | "size" | "modified" | "perms";
 type SortDir = "asc" | "desc";
-
-function formatSize(bytes: number): string {
-  if (bytes === 0) return "-";
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(1024));
-  return (bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0) + " " + units[i];
-}
 
 function formatDate(iso: string): string {
   const d = new Date(iso);

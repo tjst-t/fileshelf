@@ -45,7 +45,7 @@ done
 # Reject uid=0
 if [ "$UID_VAL" = "0" ]; then
   echo '{"error":"refusing to run as uid=0 (root)"}' >&2
-  exit 2
+  exit 10
 fi
 
 case "$OP" in
@@ -54,30 +54,30 @@ case "$OP" in
       echo '{"ok":true}'
     else
       echo '{"error":"access denied"}' >&2
-      exit 3
+      exit 1
     fi
     ;;
   list)
     echo '{"entries":[{"name":"test.txt","type":"file","size":100,"modified":"2025-01-01T00:00:00Z","perms":"-rw-r--r--"}]}'
     ;;
   read)
-    cat "$PATH_VAL" 2>/dev/null || { echo '{"error":"not found"}' >&2; exit 4; }
+    cat "$PATH_VAL" 2>/dev/null || { echo '{"error":"not found"}' >&2; exit 2; }
     ;;
   write)
     cat > "$PATH_VAL"
     echo '{"ok":true}'
     ;;
   mkdir)
-    mkdir -p "$PATH_VAL" && echo '{"ok":true}' || { echo '{"error":"mkdir failed"}' >&2; exit 10; }
+    mkdir -p "$PATH_VAL" && echo '{"ok":true}' || { echo '{"error":"mkdir failed"}' >&2; exit 3; }
     ;;
   delete)
-    rm -rf "$PATH_VAL" && echo '{"ok":true}' || { echo '{"error":"delete failed"}' >&2; exit 10; }
+    rm -rf "$PATH_VAL" && echo '{"ok":true}' || { echo '{"error":"delete failed"}' >&2; exit 3; }
     ;;
   rename)
-    mv "$PATH_VAL" "$DEST_VAL" && echo '{"ok":true}' || { echo '{"error":"rename failed"}' >&2; exit 10; }
+    mv "$PATH_VAL" "$DEST_VAL" && echo '{"ok":true}' || { echo '{"error":"rename failed"}' >&2; exit 3; }
     ;;
   copy)
-    cp -r "$PATH_VAL" "$DEST_VAL" && echo '{"ok":true}' || { echo '{"error":"copy failed"}' >&2; exit 10; }
+    cp -r "$PATH_VAL" "$DEST_VAL" && echo '{"ok":true}' || { echo '{"error":"copy failed"}' >&2; exit 3; }
     ;;
   stat)
     if [ -f "$PATH_VAL" ]; then
@@ -87,7 +87,7 @@ case "$OP" in
       echo "{\"name\":\"$(basename "$PATH_VAL")\",\"type\":\"dir\",\"size\":0,\"modified\":\"2025-01-01T00:00:00Z\",\"perms\":\"drwxr-xr-x\"}"
     else
       echo '{"error":"not found"}' >&2
-      exit 4
+      exit 2
     fi
     ;;
   *)

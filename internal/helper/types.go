@@ -21,16 +21,19 @@ type ListResponse struct {
 	Entries []Entry `json:"entries"`
 }
 
-// StatResponse is the output of the stat operation.
-type StatResponse = Entry
+// WriteResponse is the output of the write operation.
+type WriteResponse struct {
+	OK   bool  `json:"ok"`
+	Size int64 `json:"size"`
+}
 
-// Exit codes matching errno-style categories.
+// Exit codes matching the Issue #8 specification.
 const (
-	ExitOK        = 0
-	ExitBadArgs   = 1
-	ExitSecurity  = 2
-	ExitPermisson = 3  // EPERM / EACCES
-	ExitNotFound  = 4  // ENOENT
-	ExitExists    = 5  // EEXIST
-	ExitInternal  = 10 // unexpected errors
+	ExitOK       = 0
+	ExitPerm     = 1  // EPERM / EACCES
+	ExitNotFound = 2  // ENOENT
+	ExitGeneral  = 3  // other errors
+	ExitExists   = 4  // EEXIST
+	ExitSecurity = 10 // security violations (uid=0, path traversal)
+	ExitBadArgs  = 11 // invalid arguments
 )
