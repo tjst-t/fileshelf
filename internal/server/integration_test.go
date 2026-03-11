@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os/user"
 	"strings"
 	"testing"
 
@@ -123,10 +124,15 @@ func TestIntegrationFullRouter(t *testing.T) {
 		readData:  "file content",
 	}
 
+	currentUser, err := user.Current()
+	if err != nil {
+		t.Fatalf("cannot get current user: %v", err)
+	}
+
 	cfg := &config.Config{
 		Server: config.ServerConfig{
 			DevMode:   true,
-			DevUser:   "ubuntu",
+			DevUser:   currentUser.Username,
 			StaticDir: "/nonexistent",
 		},
 		Shares: []config.Share{
