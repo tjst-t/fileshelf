@@ -3,6 +3,7 @@ import type { FileEntry } from "../api/client";
 import type { ClipboardState } from "../hooks/useFileExplorer";
 import { downloadUrl } from "../api/client";
 import { formatSize } from "../utils/format";
+import { isPreviewable } from "../utils/fileTypes";
 import ContextMenu from "./ContextMenu";
 import type { ContextMenuItem } from "./ContextMenu";
 
@@ -17,6 +18,7 @@ interface FileListPaneProps {
   onSelectRange: (name: string) => void;
   onSetSelected: (names: Set<string>) => void;
   onPreview: (entry: FileEntry) => void;
+  onRichPreview: (entry: FileEntry) => void;
   onRename: (oldName: string, newName: string) => void;
   onDrop: (files: FileList) => void;
   onCopy: () => void;
@@ -75,6 +77,7 @@ export default function FileListPane({
   onSelectRange,
   onSetSelected,
   onPreview,
+  onRichPreview,
   onRename,
   onDrop,
   onCopy,
@@ -136,6 +139,8 @@ export default function FileListPane({
   const handleDoubleClick = (entry: FileEntry) => {
     if (entry.type === "dir") {
       onNavigate(currentPath + "/" + entry.name);
+    } else if (isPreviewable(entry.name)) {
+      onRichPreview(entry);
     } else {
       onPreview(entry);
     }
@@ -305,6 +310,15 @@ export default function FileListPane({
         icon: "\u{1F4C2}",
         label: "Open",
         action: () => onNavigate(currentPath + "/" + entry.name),
+      });
+    }
+
+    // Preview (single file only)
+    if (!multi && entry.type === "file" && isPreviewable(entry.name)) {
+      items.push({
+        icon: "\u{1F441}",
+        label: "Preview",
+        action: () => onRichPreview(entry),
       });
     }
 

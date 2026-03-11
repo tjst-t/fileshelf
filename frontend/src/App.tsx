@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, lazy, Suspense } from "react";
 import type { FileEntry } from "./api/client";
 import { fetchVersion } from "./api/client";
 import { useFileExplorer } from "./hooks/useFileExplorer";
@@ -15,6 +15,7 @@ import Toast from "./components/Toast";
 import DeleteDialog from "./components/DeleteDialog";
 import ResizeHandle from "./components/ResizeHandle";
 import ContextMenu from "./components/ContextMenu";
+const RichPreviewModal = lazy(() => import("./components/RichPreviewModal"));
 
 export default function App() {
   const { theme, toggleTheme } = useTheme();
@@ -59,6 +60,7 @@ export default function App() {
   const [showPreview, setShowPreview] = useState(false);
   const [previewEntry, setPreviewEntry] = useState<FileEntry | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [richPreviewEntry, setRichPreviewEntry] = useState<FileEntry | null>(null);
   const [treePaneWidth, setTreePaneWidth] = useState(240);
   const [previewPaneWidth, setPreviewPaneWidth] = useState(320);
   const [globalDragOver, setGlobalDragOver] = useState(false);
@@ -106,6 +108,10 @@ export default function App() {
   const handlePreview = useCallback((entry: FileEntry) => {
     setPreviewEntry(entry);
     setShowPreview(true);
+  }, []);
+
+  const handleRichPreview = useCallback((entry: FileEntry) => {
+    setRichPreviewEntry(entry);
   }, []);
 
   const handleTreeResize = useCallback((delta: number) => {
@@ -316,6 +322,7 @@ export default function App() {
               onSelectRange={selectRange}
               onSetSelected={setSelectedSet}
               onPreview={handlePreview}
+              onRichPreview={handleRichPreview}
               onRename={handleRename}
               onDrop={handleUpload}
               onCopy={handleCopy}
@@ -374,6 +381,19 @@ export default function App() {
           }}
           onCancel={() => setShowDeleteDialog(false)}
         />
+      )}
+
+      {/* Rich preview modal */}
+      {richPreviewEntry && (
+        <Suspense fallback={null}>
+          <RichPreviewModal
+            entry={richPreviewEntry}
+            currentPath={currentPath}
+            allEntries={entries}
+            onClose={() => setRichPreviewEntry(null)}
+            onNavigateEntry={setRichPreviewEntry}
+          />
+        </Suspense>
       )}
 
       {/* Right-drag drop menu */}
