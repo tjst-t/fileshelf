@@ -34,6 +34,23 @@
     @apply h-full;
   }
 
+  /* Theme-aware shadows via CSS variables */
+  :root {
+    --shadow-float: 0 8px 32px rgba(0, 0, 0, 0.45);
+    --shadow-menu: 0 6px 24px rgba(0, 0, 0, 0.3);
+    --shadow-toast: 0 4px 20px rgba(0, 0, 0, 0.4);
+    --shadow-sheet: 0 -4px 32px rgba(0, 0, 0, 0.3);
+    --overlay-bg: rgba(0, 0, 0, 0.5);
+  }
+
+  [data-theme="light"] {
+    --shadow-float: 0 8px 40px rgba(0, 0, 0, 0.1), 0 2px 8px rgba(0, 0, 0, 0.06);
+    --shadow-menu: 0 4px 24px rgba(0, 0, 0, 0.08), 0 1px 4px rgba(0, 0, 0, 0.04);
+    --shadow-toast: 0 4px 24px rgba(0, 0, 0, 0.08), 0 1px 6px rgba(0, 0, 0, 0.04);
+    --shadow-sheet: 0 -4px 32px rgba(0, 0, 0, 0.08);
+    --overlay-bg: rgba(0, 0, 0, 0.3);
+  }
+
   ::-webkit-scrollbar {
     width: 8px;
     height: 8px;
@@ -51,24 +68,35 @@
     @apply bg-accent/30;
   }
 
-  /* Light theme overrides */
+  /*
+   * Light theme
+   *
+   * Design principles:
+   *   - bg: canvas behind panels — cool gray with enough tint to separate from white
+   *   - surface: white content panels (tree, file list, preview, status bar)
+   *   - surface-alt: chrome bars (title, toolbar, table header) — warm off-white
+   *   - surface-raised: hover states, elevated elements, badges
+   *   - Text: 4-tier hierarchy with clear contrast steps
+   *   - Accent: deep sky blue — professional, high contrast on white (≈6:1)
+   *   - Semantic colors tuned for readability on white backgrounds
+   */
   [data-theme="light"] {
-    --color-bg: #f8f9fb;
+    --color-bg: #eef0f4;
     --color-surface: #ffffff;
-    --color-surface-alt: #f1f3f6;
-    --color-surface-raised: #e8ecf1;
-    --color-border: #d5dbe3;
-    --color-border-subtle: #c5cdd8;
-    --color-text: #1e293b;
-    --color-text-muted: #475569;
-    --color-text-dim: #64748b;
-    --color-text-faint: #94a3b8;
-    --color-text-dark: #cbd5e1;
-    --color-accent: #2563eb;
-    --color-accent-hover: #1d4ed8;
-    --color-danger: #dc2626;
-    --color-success: #059669;
-    --color-warning: #d97706;
-    --color-hover-row: rgba(0, 0, 0, 0.03);
+    --color-surface-alt: #f5f6f9;
+    --color-surface-raised: #e7eaf0;
+    --color-border: #d8dce5;
+    --color-border-subtle: #c3c9d4;
+    --color-text: #1a1e28;
+    --color-text-muted: #3d4555;
+    --color-text-dim: #606a7c;
+    --color-text-faint: #8d96a6;
+    --color-text-dark: #bac0cb;
+    --color-accent: #2870cc;
+    --color-accent-hover: #1e5db0;
+    --color-danger: #c83030;
+    --color-success: #17803a;
+    --color-warning: #b06808;
+    --color-hover-row: rgba(0, 0, 0, 0.025);
   }
 }

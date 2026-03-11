@@ -55,11 +55,11 @@ export default function ContextMenu({ x, y, items, onClose }: ContextMenuProps) 
   if (isMobile) {
     return (
       <>
-        <div className="fixed inset-0 bg-black/40 z-50" onClick={onClose} />
+        <div className="fixed inset-0 z-50" style={{ background: "var(--overlay-bg)" }} onClick={onClose} />
         <div
           ref={menuRef}
           className="fixed bottom-0 left-0 right-0 z-50 bg-surface-raised border-t border-border-subtle rounded-t-xl py-2 pb-[env(safe-area-inset-bottom,8px)]"
-          style={{ boxShadow: "0 -4px 32px rgba(0,0,0,0.3)" }}
+          style={{ boxShadow: "var(--shadow-sheet)" }}
         >
           <div className="w-10 h-1 bg-border-subtle rounded-full mx-auto mb-2" />
           {items.map((item, i) =>
@@ -100,7 +100,7 @@ export default function ContextMenu({ x, y, items, onClose }: ContextMenuProps) 
     <div
       ref={menuRef}
       className="fixed z-50 min-w-[210px] bg-surface-raised border border-border-subtle rounded-md py-1"
-      style={{ left: x, top: y, boxShadow: "0 8px 32px rgba(0,0,0,0.25)" }}
+      style={{ left: x, top: y, boxShadow: "var(--shadow-menu)" }}
     >
       {items.map((item, i) =>
         item.divider ? (

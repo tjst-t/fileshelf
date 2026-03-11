@@ -47,7 +47,7 @@ export default function Toolbar({
         disabled={!currentPath}
         title="Go up"
       >
-        ←
+        ↑
       </button>
 
       <button

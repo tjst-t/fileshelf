@@ -11,7 +11,7 @@ export default function Toast({ message, type }: ToastProps) {
           ? "bg-surface-raised border-border-subtle text-text"
           : "bg-danger/15 border-danger/30 text-danger"
       }`}
-      style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.4)" }}
+      style={{ boxShadow: "var(--shadow-toast)" }}
     >
       {message}
     </div>

@@ -283,7 +283,8 @@ export default function App() {
             {/* Backdrop */}
             {drawerOpen && (
               <div
-                className="fixed inset-0 bg-black/50 z-30"
+                className="fixed inset-0 z-30"
+                style={{ background: "var(--overlay-bg)" }}
                 onClick={() => setDrawerOpen(false)}
               />
             )}
@@ -307,7 +308,7 @@ export default function App() {
         )}
 
         {/* File list */}
-        <div className="flex-1 min-w-0 flex flex-col">
+        <div className="flex-1 min-w-0 flex flex-col bg-surface">
           {error ? (
             <div className="flex items-center justify-center h-full text-danger text-sm">{error}</div>
           ) : (
