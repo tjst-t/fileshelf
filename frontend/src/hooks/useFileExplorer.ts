@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import type { Share, FileEntry } from "../api/client";
 import {
   fetchShares,
@@ -15,6 +15,12 @@ export interface ClipboardState {
   mode: "copy" | "cut";
 }
 
+function getPathFromHash(): string {
+  const hash = window.location.hash;
+  if (!hash || hash === "#" || hash === "#/") return "";
+  return decodeURIComponent(hash.slice(1)); // remove leading '#'
+}
+
 export function useFileExplorer() {
   const [shares, setShares] = useState<Share[]>([]);
   const [currentPath, setCurrentPath] = useState("");
@@ -24,6 +30,7 @@ export function useFileExplorer() {
   const [error, setError] = useState<string | null>(null);
   const [clipboard, setClipboard] = useState<ClipboardState | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const isPopState = useRef(false);
 
   const showToast = useCallback((message: string, type: "success" | "error" = "success") => {
     setToast({ message, type });
@@ -46,6 +53,10 @@ export function useFileExplorer() {
       setEntries([]);
       setSelected(new Set());
       setError(null);
+      if (!isPopState.current) {
+        window.history.pushState(null, "", "#/");
+      }
+      isPopState.current = false;
       return;
     }
     setLoading(true);
@@ -55,6 +66,10 @@ export function useFileExplorer() {
       const data = await fetchFiles(path);
       setEntries(data);
       setCurrentPath(path);
+      if (!isPopState.current) {
+        window.history.pushState(null, "", "#" + encodeURIComponent(path));
+      }
+      isPopState.current = false;
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -66,8 +81,7 @@ export function useFileExplorer() {
     if (!currentPath) return;
     const parts = currentPath.split("/").filter(Boolean);
     if (parts.length <= 1) {
-      setCurrentPath("");
-      setEntries([]);
+      navigate("");
       return;
     }
     parts.pop();
@@ -283,8 +297,23 @@ export function useFileExplorer() {
   );
 
   useEffect(() => {
-    loadShares();
-  }, [loadShares]);
+    loadShares().then(() => {
+      const initialPath = getPathFromHash();
+      if (initialPath) {
+        navigate(initialPath);
+      }
+    });
+  }, [loadShares, navigate]);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const path = getPathFromHash();
+      isPopState.current = true;
+      navigate(path);
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [navigate]);
 
   return {
     shares,
