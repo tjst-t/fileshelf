@@ -43,9 +43,13 @@ func (f *ForkFileOperator) List(ctx context.Context, user User, path string) ([]
 }
 
 func (f *ForkFileOperator) Read(ctx context.Context, user User, path string) (io.ReadCloser, error) {
+	return f.ReadRange(ctx, user, path, 0, 0)
+}
+
+func (f *ForkFileOperator) ReadRange(ctx context.Context, user User, path string, offset, length int64) (io.ReadCloser, error) {
 	ctx, cancel := f.contextWithTimeout(ctx)
 
-	cmd := f.command(ctx, user, "read", path, "")
+	cmd := f.commandWithRange(ctx, user, "read", path, "", offset, length)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		cancel()
@@ -115,6 +119,10 @@ func (f *ForkFileOperator) contextWithTimeout(ctx context.Context) (context.Cont
 }
 
 func (f *ForkFileOperator) command(ctx context.Context, user User, op, path, dest string) *exec.Cmd {
+	return f.commandWithRange(ctx, user, op, path, dest, 0, 0)
+}
+
+func (f *ForkFileOperator) commandWithRange(ctx context.Context, user User, op, path, dest string, offset, length int64) *exec.Cmd {
 	args := []string{
 		"-op", op,
 		"-uid", fmt.Sprintf("%d", user.UID),
@@ -124,6 +132,12 @@ func (f *ForkFileOperator) command(ctx context.Context, user User, op, path, des
 	}
 	if dest != "" {
 		args = append(args, "-dest", dest)
+	}
+	if offset > 0 {
+		args = append(args, "-offset", fmt.Sprintf("%d", offset))
+	}
+	if length > 0 {
+		args = append(args, "-length", fmt.Sprintf("%d", length))
 	}
 	return exec.CommandContext(ctx, f.HelperPath, args...)
 }

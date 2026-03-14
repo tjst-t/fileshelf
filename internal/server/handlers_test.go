@@ -58,6 +58,19 @@ func (m *mockFileOperator) Rename(_ context.Context, _ fileop.User, _, _ string)
 func (m *mockFileOperator) Copy(_ context.Context, _ fileop.User, _, _ string) error {
 	return m.copyErr
 }
+func (m *mockFileOperator) ReadRange(_ context.Context, _ fileop.User, _ string, offset, length int64) (io.ReadCloser, error) {
+	if m.readErr != nil {
+		return nil, m.readErr
+	}
+	data := m.readData
+	if offset > 0 && int(offset) < len(data) {
+		data = data[offset:]
+	}
+	if length > 0 && int(length) < len(data) {
+		data = data[:length]
+	}
+	return io.NopCloser(strings.NewReader(data)), nil
+}
 func (m *mockFileOperator) Stat(_ context.Context, _ fileop.User, _ string) (*fileop.Entry, error) {
 	return m.statEntry, m.statErr
 }
@@ -277,6 +290,174 @@ func TestHandleHelperNotFoundError(t *testing.T) {
 
 	if rr.Code != http.StatusNotFound {
 		t.Errorf("status=%d, want %d", rr.Code, http.StatusNotFound)
+	}
+}
+
+func TestHandleFilesPreviewNoRange(t *testing.T) {
+	mock := &mockFileOperator{
+		readData:  "hello world video data",
+		statEntry: &fileop.Entry{Name: "clip.mp4", Type: "file", Size: 22},
+	}
+	h := &Handlers{FileOp: mock, Config: testConfig()}
+
+	req := httptest.NewRequest("GET", "/api/files/preview?path=/media/clip.mp4", nil)
+	req = withUser(req, testUser())
+	rr := httptest.NewRecorder()
+
+	h.HandleFilesPreview(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("status=%d, want %d", rr.Code, http.StatusOK)
+	}
+	if rr.Header().Get("Accept-Ranges") != "bytes" {
+		t.Error("expected Accept-Ranges: bytes")
+	}
+	if rr.Header().Get("Content-Length") != "22" {
+		t.Errorf("Content-Length=%q, want %q", rr.Header().Get("Content-Length"), "22")
+	}
+	if rr.Body.String() != "hello world video data" {
+		t.Errorf("body=%q, want %q", rr.Body.String(), "hello world video data")
+	}
+}
+
+func TestHandleFilesPreviewRangeNormal(t *testing.T) {
+	// "0123456789" (10 bytes), request bytes=0-4 → "01234"
+	mock := &mockFileOperator{
+		readData:  "0123456789",
+		statEntry: &fileop.Entry{Name: "clip.mp4", Type: "file", Size: 10},
+	}
+	h := &Handlers{FileOp: mock, Config: testConfig()}
+
+	req := httptest.NewRequest("GET", "/api/files/preview?path=/media/clip.mp4", nil)
+	req.Header.Set("Range", "bytes=0-4")
+	req = withUser(req, testUser())
+	rr := httptest.NewRecorder()
+
+	h.HandleFilesPreview(rr, req)
+
+	if rr.Code != http.StatusPartialContent {
+		t.Errorf("status=%d, want %d", rr.Code, http.StatusPartialContent)
+	}
+	if got := rr.Header().Get("Content-Range"); got != "bytes 0-4/10" {
+		t.Errorf("Content-Range=%q, want %q", got, "bytes 0-4/10")
+	}
+	if rr.Header().Get("Content-Length") != "5" {
+		t.Errorf("Content-Length=%q, want %q", rr.Header().Get("Content-Length"), "5")
+	}
+	if rr.Body.String() != "01234" {
+		t.Errorf("body=%q, want %q", rr.Body.String(), "01234")
+	}
+}
+
+func TestHandleFilesPreviewRangeOpenEnded(t *testing.T) {
+	// "0123456789" (10 bytes), request bytes=7- → "789"
+	mock := &mockFileOperator{
+		readData:  "0123456789",
+		statEntry: &fileop.Entry{Name: "clip.mp4", Type: "file", Size: 10},
+	}
+	h := &Handlers{FileOp: mock, Config: testConfig()}
+
+	req := httptest.NewRequest("GET", "/api/files/preview?path=/media/clip.mp4", nil)
+	req.Header.Set("Range", "bytes=7-")
+	req = withUser(req, testUser())
+	rr := httptest.NewRecorder()
+
+	h.HandleFilesPreview(rr, req)
+
+	if rr.Code != http.StatusPartialContent {
+		t.Errorf("status=%d, want %d", rr.Code, http.StatusPartialContent)
+	}
+	if got := rr.Header().Get("Content-Range"); got != "bytes 7-9/10" {
+		t.Errorf("Content-Range=%q, want %q", got, "bytes 7-9/10")
+	}
+	if rr.Body.String() != "789" {
+		t.Errorf("body=%q, want %q", rr.Body.String(), "789")
+	}
+}
+
+func TestHandleFilesPreviewRangeSuffix(t *testing.T) {
+	// "0123456789" (10 bytes), request bytes=-3 → "789"
+	mock := &mockFileOperator{
+		readData:  "0123456789",
+		statEntry: &fileop.Entry{Name: "clip.mp4", Type: "file", Size: 10},
+	}
+	h := &Handlers{FileOp: mock, Config: testConfig()}
+
+	req := httptest.NewRequest("GET", "/api/files/preview?path=/media/clip.mp4", nil)
+	req.Header.Set("Range", "bytes=-3")
+	req = withUser(req, testUser())
+	rr := httptest.NewRecorder()
+
+	h.HandleFilesPreview(rr, req)
+
+	if rr.Code != http.StatusPartialContent {
+		t.Errorf("status=%d, want %d", rr.Code, http.StatusPartialContent)
+	}
+	if got := rr.Header().Get("Content-Range"); got != "bytes 7-9/10" {
+		t.Errorf("Content-Range=%q, want %q", got, "bytes 7-9/10")
+	}
+	if rr.Body.String() != "789" {
+		t.Errorf("body=%q, want %q", rr.Body.String(), "789")
+	}
+}
+
+func TestHandleFilesPreviewRangeInvalid(t *testing.T) {
+	mock := &mockFileOperator{
+		readData:  "0123456789",
+		statEntry: &fileop.Entry{Name: "clip.mp4", Type: "file", Size: 10},
+	}
+	h := &Handlers{FileOp: mock, Config: testConfig()}
+
+	tests := []struct {
+		name       string
+		rangeVal   string
+		wantStatus int
+	}{
+		{"start beyond size", "bytes=20-30", http.StatusRequestedRangeNotSatisfiable},
+		{"start > end", "bytes=5-3", http.StatusRequestedRangeNotSatisfiable},
+		{"multiple ranges", "bytes=0-1,3-4", http.StatusRequestedRangeNotSatisfiable},
+		{"not bytes unit", "items=0-4", http.StatusBadRequest},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/api/files/preview?path=/media/clip.mp4", nil)
+			req.Header.Set("Range", tt.rangeVal)
+			req = withUser(req, testUser())
+			rr := httptest.NewRecorder()
+
+			h.HandleFilesPreview(rr, req)
+
+			if rr.Code != tt.wantStatus {
+				t.Errorf("status=%d, want %d", rr.Code, tt.wantStatus)
+			}
+		})
+	}
+}
+
+func TestHandleFilesPreviewRangeClampEnd(t *testing.T) {
+	// end exceeds file size → clamped to totalSize-1
+	mock := &mockFileOperator{
+		readData:  "0123456789",
+		statEntry: &fileop.Entry{Name: "clip.mp4", Type: "file", Size: 10},
+	}
+	h := &Handlers{FileOp: mock, Config: testConfig()}
+
+	req := httptest.NewRequest("GET", "/api/files/preview?path=/media/clip.mp4", nil)
+	req.Header.Set("Range", "bytes=5-999")
+	req = withUser(req, testUser())
+	rr := httptest.NewRecorder()
+
+	h.HandleFilesPreview(rr, req)
+
+	if rr.Code != http.StatusPartialContent {
+		t.Errorf("status=%d, want %d", rr.Code, http.StatusPartialContent)
+	}
+	if got := rr.Header().Get("Content-Range"); got != "bytes 5-9/10" {
+		t.Errorf("Content-Range=%q, want %q", got, "bytes 5-9/10")
+	}
+	if rr.Body.String() != "56789" {
+		t.Errorf("body=%q, want %q", rr.Body.String(), "56789")
 	}
 }
 

@@ -60,6 +60,28 @@ func (l *LocalFileOperator) Read(_ context.Context, _ User, path string) (io.Rea
 	return os.Open(path)
 }
 
+func (l *LocalFileOperator) ReadRange(_ context.Context, _ User, path string, offset, length int64) (io.ReadCloser, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	if offset > 0 {
+		if _, err := f.Seek(offset, io.SeekStart); err != nil {
+			f.Close()
+			return nil, err
+		}
+	}
+	if length > 0 {
+		return &limitedReadCloser{Reader: io.LimitReader(f, length), Closer: f}, nil
+	}
+	return f, nil
+}
+
+type limitedReadCloser struct {
+	io.Reader
+	io.Closer
+}
+
 func (l *LocalFileOperator) Write(_ context.Context, _ User, path string, r io.Reader) error {
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, ".fileshelf-upload-*")

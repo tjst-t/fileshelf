@@ -8,6 +8,7 @@ import (
 	"mime"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/tjst-t/fileshelf/internal/config"
@@ -141,7 +142,7 @@ func (h *Handlers) HandleFilesDownload(w http.ResponseWriter, r *http.Request) {
 	io.Copy(w, rc)
 }
 
-// HandleFilesPreview returns text content for preview.
+// HandleFilesPreview returns file content for preview, with Range request support for media streaming.
 func (h *Handlers) HandleFilesPreview(w http.ResponseWriter, r *http.Request) {
 	user := UserFromContext(r.Context())
 	if user == nil {
@@ -157,6 +158,25 @@ func (h *Handlers) HandleFilesPreview(w http.ResponseWriter, r *http.Request) {
 
 	absPath := h.resolvePath(path)
 
+	ct := mime.TypeByExtension(filepath.Ext(absPath))
+	if ct == "" {
+		ct = "application/octet-stream"
+	}
+
+	// Check for Range header to support video/audio seeking
+	rangeHeader := r.Header.Get("Range")
+	if rangeHeader != "" {
+		h.serveRangePreview(w, r, *user, absPath, ct, rangeHeader)
+		return
+	}
+
+	// No Range header: serve full file
+	entry, err := h.FileOp.Stat(r.Context(), *user, absPath)
+	if err != nil {
+		writeHelperError(w, err)
+		return
+	}
+
 	rc, err := h.FileOp.Read(r.Context(), *user, absPath)
 	if err != nil {
 		writeHelperError(w, err)
@@ -164,11 +184,98 @@ func (h *Handlers) HandleFilesPreview(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rc.Close()
 
-	ct := mime.TypeByExtension(filepath.Ext(absPath))
-	if ct == "" {
-		ct = "application/octet-stream"
-	}
 	w.Header().Set("Content-Type", ct)
+	w.Header().Set("Content-Length", strconv.FormatInt(entry.Size, 10))
+	w.Header().Set("Accept-Ranges", "bytes")
+
+	io.Copy(w, rc)
+}
+
+// serveRangePreview handles HTTP Range requests for media streaming.
+func (h *Handlers) serveRangePreview(w http.ResponseWriter, r *http.Request, user fileop.User, absPath, contentType, rangeHeader string) {
+	// Parse "bytes=start-end"
+	if !strings.HasPrefix(rangeHeader, "bytes=") {
+		writeJSONError(w, "invalid range header", http.StatusBadRequest)
+		return
+	}
+
+	entry, err := h.FileOp.Stat(r.Context(), user, absPath)
+	if err != nil {
+		writeHelperError(w, err)
+		return
+	}
+	totalSize := entry.Size
+
+	rangeSpec := strings.TrimPrefix(rangeHeader, "bytes=")
+	// Support only single range (what video players use)
+	if strings.Contains(rangeSpec, ",") {
+		writeJSONError(w, "multiple ranges not supported", http.StatusRequestedRangeNotSatisfiable)
+		return
+	}
+
+	parts := strings.SplitN(rangeSpec, "-", 2)
+	if len(parts) != 2 {
+		writeJSONError(w, "invalid range spec", http.StatusBadRequest)
+		return
+	}
+
+	var start, end int64
+	if parts[0] == "" {
+		// Suffix range: bytes=-500
+		suffixLen, err := strconv.ParseInt(parts[1], 10, 64)
+		if err != nil || suffixLen <= 0 {
+			w.Header().Set("Content-Range", fmt.Sprintf("bytes */%d", totalSize))
+			w.WriteHeader(http.StatusRequestedRangeNotSatisfiable)
+			return
+		}
+		start = totalSize - suffixLen
+		if start < 0 {
+			start = 0
+		}
+		end = totalSize - 1
+	} else {
+		start, err = strconv.ParseInt(parts[0], 10, 64)
+		if err != nil || start < 0 {
+			w.Header().Set("Content-Range", fmt.Sprintf("bytes */%d", totalSize))
+			w.WriteHeader(http.StatusRequestedRangeNotSatisfiable)
+			return
+		}
+		if parts[1] == "" {
+			// Open-ended: bytes=500-
+			end = totalSize - 1
+		} else {
+			end, err = strconv.ParseInt(parts[1], 10, 64)
+			if err != nil {
+				w.Header().Set("Content-Range", fmt.Sprintf("bytes */%d", totalSize))
+				w.WriteHeader(http.StatusRequestedRangeNotSatisfiable)
+				return
+			}
+		}
+	}
+
+	if start > end || start >= totalSize {
+		w.Header().Set("Content-Range", fmt.Sprintf("bytes */%d", totalSize))
+		w.WriteHeader(http.StatusRequestedRangeNotSatisfiable)
+		return
+	}
+	if end >= totalSize {
+		end = totalSize - 1
+	}
+
+	length := end - start + 1
+
+	rc, err := h.FileOp.ReadRange(r.Context(), user, absPath, start, length)
+	if err != nil {
+		writeHelperError(w, err)
+		return
+	}
+	defer rc.Close()
+
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, totalSize))
+	w.Header().Set("Content-Length", strconv.FormatInt(length, 10))
+	w.Header().Set("Accept-Ranges", "bytes")
+	w.WriteHeader(http.StatusPartialContent)
 
 	io.Copy(w, rc)
 }

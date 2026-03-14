@@ -26,12 +26,14 @@ var AllowedOps = map[string]bool{
 
 // Params holds the parsed command-line arguments.
 type Params struct {
-	Op    string
-	UID   int
-	GID   int
-	Path  string
-	Dest  string
-	Bases []string
+	Op     string
+	UID    int
+	GID    int
+	Path   string
+	Dest   string
+	Bases  []string
+	Offset int64
+	Length int64
 }
 
 // Run executes the helper operation and writes results to stdout/stderr.
@@ -90,7 +92,7 @@ func execute(p Params, stdin io.Reader, stdout, stderr io.Writer) int {
 		return ExitOK
 
 	case "read":
-		if err := OpRead(p.Path, stdout); err != nil {
+		if err := OpRead(p.Path, p.Offset, p.Length, stdout); err != nil {
 			// read errors go to stderr since stdout is the binary stream
 			return writeOpError(stderr, err)
 		}

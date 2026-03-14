@@ -27,6 +27,7 @@ type FileOperator interface {
 	Access(ctx context.Context, user User, path string) error
 	List(ctx context.Context, user User, path string) ([]Entry, error)
 	Read(ctx context.Context, user User, path string) (io.ReadCloser, error)
+	ReadRange(ctx context.Context, user User, path string, offset, length int64) (io.ReadCloser, error)
 	Write(ctx context.Context, user User, path string, r io.Reader) error
 	Mkdir(ctx context.Context, user User, path string) error
 	Delete(ctx context.Context, user User, path string) error
