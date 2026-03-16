@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <!-- Shelf bracket / bookend -->
+  <rect x="4" y="4" width="24" height="24" rx="4" fill="#2563eb"/>
+
+  <!-- Files/documents on shelf -->
+  <rect x="8" y="7" width="5" height="14" rx="1" fill="#93c5fd" transform="rotate(-6 10.5 14)"/>
+  <rect x="12" y="7" width="5" height="14" rx="1" fill="#bfdbfe"/>
+  <rect x="17" y="8" width="5" height="13" rx="1" fill="#dbeafe" transform="rotate(4 19.5 14.5)"/>
+
+  <!-- Shelf line -->
+  <rect x="6" y="22" width="20" height="2.5" rx="1" fill="#1e40af"/>
+</svg>
