@@ -2,12 +2,14 @@ package server
 
 import (
 	"archive/zip"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"mime"
 	"net/http"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -531,6 +533,187 @@ func (h *Handlers) addDirToZip(r *http.Request, user fileop.User, zw *zip.Writer
 	}
 
 	return nil
+}
+
+// maxZipSize is the maximum ZIP file size we'll buffer into memory (500MB).
+const maxZipSize = 500 * 1024 * 1024
+
+// zipImageEntry represents an image file found inside a ZIP archive.
+type zipImageEntry struct {
+	Index int    `json:"index"`
+	Name  string `json:"name"`
+	Size  uint64 `json:"size"`
+}
+
+// isImageExt returns true if the extension (with leading dot) is a supported image type.
+func isImageExt(ext string) bool {
+	switch strings.ToLower(ext) {
+	case ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".avif":
+		return true
+	}
+	return false
+}
+
+// readZipImages reads a ZIP file via FileOp.Read, buffers it into memory, and returns
+// the zip.Reader along with a sorted list of image entries. The caller must not use
+// the returned zip.Reader after the data slice is garbage collected.
+func (h *Handlers) readZipImages(w http.ResponseWriter, r *http.Request, user fileop.User, absPath string) (*zip.Reader, []zipImageEntry, bool) {
+	rc, err := h.FileOp.Read(r.Context(), user, absPath)
+	if err != nil {
+		writeHelperError(w, err)
+		return nil, nil, false
+	}
+	defer rc.Close()
+
+	data, err := io.ReadAll(io.LimitReader(rc, maxZipSize+1))
+	if err != nil {
+		writeJSONError(w, "failed to read zip file: "+err.Error(), http.StatusInternalServerError)
+		return nil, nil, false
+	}
+	if len(data) > maxZipSize {
+		writeJSONError(w, "zip file too large (max 500MB)", http.StatusBadRequest)
+		return nil, nil, false
+	}
+
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		writeJSONError(w, "failed to parse zip file: "+err.Error(), http.StatusBadRequest)
+		return nil, nil, false
+	}
+
+	var images []zipImageEntry
+	for _, f := range zr.File {
+		// Skip directories
+		if f.FileInfo().IsDir() {
+			continue
+		}
+		name := f.Name
+		// Skip __MACOSX/ entries
+		if strings.HasPrefix(name, "__MACOSX/") {
+			continue
+		}
+		// Skip hidden files (basename starting with '.')
+		base := filepath.Base(name)
+		if strings.HasPrefix(base, ".") {
+			continue
+		}
+		// Check if it's an image
+		if !isImageExt(filepath.Ext(base)) {
+			continue
+		}
+		images = append(images, zipImageEntry{
+			Name: name,
+			Size: f.UncompressedSize64,
+		})
+	}
+
+	// Sort by name
+	sort.Slice(images, func(i, j int) bool {
+		return images[i].Name < images[j].Name
+	})
+
+	// Assign indices after sorting
+	for i := range images {
+		images[i].Index = i
+	}
+
+	return zr, images, true
+}
+
+// HandleZipPages returns the list of image pages in a ZIP file.
+func (h *Handlers) HandleZipPages(w http.ResponseWriter, r *http.Request) {
+	user := UserFromContext(r.Context())
+	if user == nil {
+		writeJSONError(w, "not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	path := r.URL.Query().Get("path")
+	if path == "" {
+		writeJSONError(w, "path parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	absPath := h.resolvePath(path)
+
+	_, images, ok := h.readZipImages(w, r, *user, absPath)
+	if !ok {
+		return
+	}
+
+	writeJSON(w, map[string]interface{}{
+		"pages": images,
+		"total": len(images),
+	})
+}
+
+// HandleZipPage serves a single image page from a ZIP file.
+func (h *Handlers) HandleZipPage(w http.ResponseWriter, r *http.Request) {
+	user := UserFromContext(r.Context())
+	if user == nil {
+		writeJSONError(w, "not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	path := r.URL.Query().Get("path")
+	if path == "" {
+		writeJSONError(w, "path parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	pageStr := r.URL.Query().Get("page")
+	if pageStr == "" {
+		writeJSONError(w, "page parameter is required", http.StatusBadRequest)
+		return
+	}
+	pageIndex, err := strconv.Atoi(pageStr)
+	if err != nil || pageIndex < 0 {
+		writeJSONError(w, "invalid page parameter", http.StatusBadRequest)
+		return
+	}
+
+	absPath := h.resolvePath(path)
+
+	zr, images, ok := h.readZipImages(w, r, *user, absPath)
+	if !ok {
+		return
+	}
+
+	if pageIndex >= len(images) {
+		writeJSONError(w, "page index out of range", http.StatusNotFound)
+		return
+	}
+
+	target := images[pageIndex]
+
+	// Find the file in the zip reader
+	var targetFile *zip.File
+	for _, f := range zr.File {
+		if f.Name == target.Name {
+			targetFile = f
+			break
+		}
+	}
+	if targetFile == nil {
+		writeJSONError(w, "image not found in zip", http.StatusInternalServerError)
+		return
+	}
+
+	frc, err := targetFile.Open()
+	if err != nil {
+		writeJSONError(w, "failed to open image in zip: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer frc.Close()
+
+	ct := mime.TypeByExtension(filepath.Ext(target.Name))
+	if ct == "" {
+		ct = "application/octet-stream"
+	}
+	w.Header().Set("Content-Type", ct)
+	w.Header().Set("Content-Length", strconv.FormatUint(target.Size, 10))
+
+	io.Copy(w, frc)
 }
 
 // resolvePath converts a virtual path like "/media/movies" to the real filesystem path.

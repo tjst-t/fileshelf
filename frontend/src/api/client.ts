@@ -97,6 +97,21 @@ export function downloadZipUrl(paths: string[]): string {
   return `/api/files/download-zip?paths=${encodeURIComponent(paths.join(","))}`;
 }
 
+export interface ZipPageInfo {
+  index: number;
+  name: string;
+  size: number;
+}
+
+export async function fetchZipPages(path: string): Promise<{ pages: ZipPageInfo[]; total: number }> {
+  const res = await fetch(`/api/files/zip-pages?path=${encodeURIComponent(path)}`);
+  return handleResponse<{ pages: ZipPageInfo[]; total: number }>(res);
+}
+
+export function zipPageUrl(path: string, page: number): string {
+  return `/api/files/zip-page?path=${encodeURIComponent(path)}&page=${page}`;
+}
+
 export async function copyFile(
   path: string,
   dest: string

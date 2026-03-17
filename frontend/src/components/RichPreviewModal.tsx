@@ -1,8 +1,10 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from "react";
 import type { FileEntry } from "../api/client";
 import { previewUrl, downloadUrl } from "../api/client";
 import { formatSize } from "../utils/format";
 import { getExt, fileType, isPreviewable } from "../utils/fileTypes";
+
+const ComicViewer = lazy(() => import("./ComicViewer"));
 import hljs from "highlight.js/lib/core";
 import javascript from "highlight.js/lib/languages/javascript";
 import typescript from "highlight.js/lib/languages/typescript";
@@ -161,6 +163,19 @@ export default function RichPreviewModal({
     a.click();
     document.body.removeChild(a);
   };
+
+  // Comic viewer gets its own full-screen UI
+  if (type === "comic") {
+    return (
+      <Suspense fallback={
+        <div className="fixed inset-0 z-[100] flex items-center justify-center" style={{ background: "rgba(0,0,0,0.95)" }}>
+          <div className="text-white/40 text-sm">Loading...</div>
+        </div>
+      }>
+        <ComicViewer filePath={filePath} onClose={onClose} />
+      </Suspense>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-[100] flex flex-col" style={{ background: "rgba(0,0,0,0.85)" }}>

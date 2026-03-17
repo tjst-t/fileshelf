@@ -9,18 +9,20 @@ const TEXT_EXTS = new Set([
 const IMAGE_EXTS = new Set(["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp", "ico", "avif"]);
 const VIDEO_EXTS = new Set(["mp4", "webm", "mov"]);
 const AUDIO_EXTS = new Set(["mp3", "wav", "ogg", "flac", "aac", "m4a", "wma"]);
+const COMIC_EXTS = new Set(["zip", "cbz"]);
 
 export function getExt(name: string): string {
   return name.split(".").pop()?.toLowerCase() || "";
 }
 
-export function fileType(name: string): "image" | "video" | "audio" | "pdf" | "text" | "unknown" {
+export function fileType(name: string): "image" | "video" | "audio" | "pdf" | "text" | "comic" | "unknown" {
   const ext = getExt(name);
   if (IMAGE_EXTS.has(ext)) return "image";
   if (VIDEO_EXTS.has(ext)) return "video";
   if (AUDIO_EXTS.has(ext)) return "audio";
   if (ext === "pdf") return "pdf";
   if (TEXT_EXTS.has(ext)) return "text";
+  if (COMIC_EXTS.has(ext)) return "comic";
   return "unknown";
 }
 
