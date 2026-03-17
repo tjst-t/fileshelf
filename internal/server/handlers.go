@@ -13,6 +13,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/tjst-t/fileshelf/internal/config"
 	"github.com/tjst-t/fileshelf/internal/fileop"
@@ -21,8 +23,9 @@ import (
 
 // Handlers holds dependencies for HTTP handlers.
 type Handlers struct {
-	FileOp fileop.FileOperator
-	Config *config.Config
+	FileOp   fileop.FileOperator
+	Config   *config.Config
+	zipCache sync.Map // map[string]*zipCacheEntry (key: "path\x00mtime")
 }
 
 // HandleVersion returns the server version.
@@ -536,11 +539,25 @@ func (h *Handlers) addDirToZip(r *http.Request, user fileop.User, zw *zip.Writer
 	return nil
 }
 
-// zipImageEntry represents an image file found inside a ZIP archive.
+// zipImageEntry represents an image file found inside a ZIP archive (JSON response).
 type zipImageEntry struct {
 	Index int    `json:"index"`
 	Name  string `json:"name"`
 	Size  uint64 `json:"size"`
+}
+
+// zipCachedPage holds precomputed metadata for a single image in a ZIP.
+type zipCachedPage struct {
+	Name           string
+	Size           uint64 // uncompressed size
+	DataOffset     int64
+	CompressedSize int64
+	Method         uint16
+}
+
+// zipCacheEntry holds cached ZIP metadata so we don't re-parse the central directory.
+type zipCacheEntry struct {
+	Pages []zipCachedPage
 }
 
 // isImageExt returns true if the extension (with leading dot) is a supported image type.
@@ -553,8 +570,6 @@ func isImageExt(ext string) bool {
 }
 
 // fileOpReaderAt implements io.ReaderAt using FileOp.ReadRange.
-// Each ReadAt call forks a helper process, but zip.NewReader only makes
-// a few calls (central directory + individual file data).
 type fileOpReaderAt struct {
 	ctx    context.Context
 	fileOp fileop.FileOperator
@@ -571,24 +586,33 @@ func (r *fileOpReaderAt) ReadAt(p []byte, off int64) (int, error) {
 
 	n, err := io.ReadFull(rc, p)
 	if err == io.ErrUnexpectedEOF {
-		// ReadFull returns ErrUnexpectedEOF when fewer bytes are available than requested.
-		// ReaderAt contract: return n and io.EOF when fewer bytes available at end of file.
 		err = io.EOF
 	}
 	return n, err
 }
 
-// readZipImages opens a ZIP file via FileOp.ReadRange (random access) and returns
-// the zip.Reader along with a sorted list of image entries.
-func (h *Handlers) readZipImages(w http.ResponseWriter, r *http.Request, user fileop.User, absPath string) (*zip.Reader, []zipImageEntry, bool) {
-	entry, err := h.FileOp.Stat(r.Context(), user, absPath)
+func zipCacheKey(absPath string, modTime time.Time) string {
+	return absPath + "\x00" + modTime.String()
+}
+
+// getZipPages returns cached ZIP page metadata, parsing the ZIP if not cached.
+func (h *Handlers) getZipPages(ctx context.Context, user fileop.User, absPath string) (*zipCacheEntry, error) {
+	// Stat to get mtime for cache key
+	entry, err := h.FileOp.Stat(ctx, user, absPath)
 	if err != nil {
-		writeHelperError(w, err)
-		return nil, nil, false
+		return nil, err
 	}
 
+	key := zipCacheKey(absPath, entry.Modified)
+
+	// Check cache
+	if cached, ok := h.zipCache.Load(key); ok {
+		return cached.(*zipCacheEntry), nil
+	}
+
+	// Parse the ZIP central directory
 	ra := &fileOpReaderAt{
-		ctx:    r.Context(),
+		ctx:    ctx,
 		fileOp: h.FileOp,
 		user:   user,
 		path:   absPath,
@@ -596,47 +620,46 @@ func (h *Handlers) readZipImages(w http.ResponseWriter, r *http.Request, user fi
 
 	zr, err := zip.NewReader(ra, entry.Size)
 	if err != nil {
-		writeJSONError(w, "failed to parse zip file: "+err.Error(), http.StatusBadRequest)
-		return nil, nil, false
+		return nil, fmt.Errorf("failed to parse zip file: %w", err)
 	}
 
-	var images []zipImageEntry
+	// Collect image entries and precompute DataOffset for each
+	var pages []zipCachedPage
 	for _, f := range zr.File {
-		// Skip directories
 		if f.FileInfo().IsDir() {
 			continue
 		}
 		name := f.Name
-		// Skip __MACOSX/ entries
 		if strings.HasPrefix(name, "__MACOSX/") {
 			continue
 		}
-		// Skip hidden files (basename starting with '.')
 		base := filepath.Base(name)
 		if strings.HasPrefix(base, ".") {
 			continue
 		}
-		// Check if it's an image
 		if !isImageExt(filepath.Ext(base)) {
 			continue
 		}
-		images = append(images, zipImageEntry{
-			Name: name,
-			Size: f.UncompressedSize64,
+		offset, err := f.DataOffset()
+		if err != nil {
+			continue
+		}
+		pages = append(pages, zipCachedPage{
+			Name:           name,
+			Size:           f.UncompressedSize64,
+			DataOffset:     offset,
+			CompressedSize: int64(f.CompressedSize64),
+			Method:         f.Method,
 		})
 	}
 
-	// Sort by name
-	sort.Slice(images, func(i, j int) bool {
-		return images[i].Name < images[j].Name
+	sort.Slice(pages, func(i, j int) bool {
+		return pages[i].Name < pages[j].Name
 	})
 
-	// Assign indices after sorting
-	for i := range images {
-		images[i].Index = i
-	}
-
-	return zr, images, true
+	result := &zipCacheEntry{Pages: pages}
+	h.zipCache.Store(key, result)
+	return result, nil
 }
 
 // HandleZipPages returns the list of image pages in a ZIP file.
@@ -655,9 +678,15 @@ func (h *Handlers) HandleZipPages(w http.ResponseWriter, r *http.Request) {
 
 	absPath := h.resolvePath(path)
 
-	_, images, ok := h.readZipImages(w, r, *user, absPath)
-	if !ok {
+	cached, err := h.getZipPages(r.Context(), *user, absPath)
+	if err != nil {
+		writeHelperError(w, err)
 		return
+	}
+
+	images := make([]zipImageEntry, len(cached.Pages))
+	for i, p := range cached.Pages {
+		images[i] = zipImageEntry{Index: i, Name: p.Name, Size: p.Size}
 	}
 
 	w.Header().Set("Cache-Control", "private, max-age=86400")
@@ -668,8 +697,7 @@ func (h *Handlers) HandleZipPages(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleZipPage serves a single image page from a ZIP file.
-// It uses DataOffset + a single ReadRange call to fetch the compressed data,
-// avoiding the per-chunk fork overhead of zip.File.Open().
+// Uses cached metadata so only a single ReadRange fork is needed per page.
 func (h *Handlers) HandleZipPage(w http.ResponseWriter, r *http.Request) {
 	user := UserFromContext(r.Context())
 	if user == nil {
@@ -696,46 +724,26 @@ func (h *Handlers) HandleZipPage(w http.ResponseWriter, r *http.Request) {
 
 	absPath := h.resolvePath(path)
 
-	zr, images, ok := h.readZipImages(w, r, *user, absPath)
-	if !ok {
+	cached, err := h.getZipPages(r.Context(), *user, absPath)
+	if err != nil {
+		writeHelperError(w, err)
 		return
 	}
 
-	if pageIndex >= len(images) {
+	if pageIndex >= len(cached.Pages) {
 		writeJSONError(w, "page index out of range", http.StatusNotFound)
 		return
 	}
 
-	target := images[pageIndex]
+	page := cached.Pages[pageIndex]
 
-	// Find the file in the zip reader
-	var targetFile *zip.File
-	for _, f := range zr.File {
-		if f.Name == target.Name {
-			targetFile = f
-			break
-		}
-	}
-	if targetFile == nil {
-		writeJSONError(w, "image not found in zip", http.StatusInternalServerError)
-		return
-	}
-
-	ct := mime.TypeByExtension(filepath.Ext(target.Name))
+	ct := mime.TypeByExtension(filepath.Ext(page.Name))
 	if ct == "" {
 		ct = "application/octet-stream"
 	}
 
-	// Get the offset of the compressed data within the ZIP file.
-	dataOffset, err := targetFile.DataOffset()
-	if err != nil {
-		writeJSONError(w, "failed to get data offset: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// Read the entire compressed data in a single ReadRange call.
-	compressedSize := int64(targetFile.CompressedSize64)
-	rc, err := h.FileOp.ReadRange(r.Context(), *user, absPath, dataOffset, compressedSize)
+	// Single ReadRange call to fetch the compressed data.
+	rc, err := h.FileOp.ReadRange(r.Context(), *user, absPath, page.DataOffset, page.CompressedSize)
 	if err != nil {
 		writeHelperError(w, err)
 		return
@@ -745,28 +753,19 @@ func (h *Handlers) HandleZipPage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", ct)
 	w.Header().Set("Cache-Control", "private, max-age=86400, immutable")
 
-	switch targetFile.Method {
+	switch page.Method {
 	case zip.Store:
-		// No compression: stream directly.
-		w.Header().Set("Content-Length", strconv.FormatInt(compressedSize, 10))
+		w.Header().Set("Content-Length", strconv.FormatInt(page.CompressedSize, 10))
 		io.Copy(w, rc)
 	case zip.Deflate:
-		// Decompress the data.
-		w.Header().Set("Content-Length", strconv.FormatUint(target.Size, 10))
+		w.Header().Set("Content-Length", strconv.FormatUint(page.Size, 10))
 		fr := flate.NewReader(rc)
 		defer fr.Close()
 		io.Copy(w, fr)
 	default:
-		// Unsupported compression: fall back to zip.File.Open()
-		rc.Close()
-		frc, err := targetFile.Open()
-		if err != nil {
-			writeJSONError(w, "failed to open image in zip: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-		defer frc.Close()
-		w.Header().Set("Content-Length", strconv.FormatUint(target.Size, 10))
-		io.Copy(w, frc)
+		// Unknown compression: serve compressed data as-is (browser may handle it)
+		w.Header().Set("Content-Length", strconv.FormatInt(page.CompressedSize, 10))
+		io.Copy(w, rc)
 	}
 }
 
