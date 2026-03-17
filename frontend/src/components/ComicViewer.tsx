@@ -45,6 +45,14 @@ export default function ComicViewer({ filePath, onClose }: ComicViewerProps) {
     return () => { document.body.style.overflow = prev; };
   }, []);
 
+  // Close on browser back button
+  useEffect(() => {
+    history.pushState(null, "", location.href);
+    const handler = () => onClose();
+    window.addEventListener("popstate", handler);
+    return () => window.removeEventListener("popstate", handler);
+  }, [onClose]);
+
   // Track landscape pages
   const markLandscape = useCallback((pageIndex: number) => {
     setLandscapePages((prev) => {

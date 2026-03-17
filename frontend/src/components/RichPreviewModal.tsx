@@ -127,10 +127,11 @@ export default function RichPreviewModal({
     if (hasNext) onNavigateEntry(galleryEntries[currentIndex + 1]);
   }, [hasNext, galleryEntries, currentIndex, onNavigateEntry]);
 
-  // Keyboard navigation
+  // Keyboard navigation (skip for comic — ComicViewer handles its own keys)
   // Arrow keys only for gallery nav on image/audio types (text/pdf/video need arrows for scrolling/seeking)
   const enableArrowNav = type === "image" || type === "audio";
   useEffect(() => {
+    if (type === "comic") return;
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
@@ -146,14 +147,15 @@ export default function RichPreviewModal({
     };
     window.addEventListener("keydown", handler, true);
     return () => window.removeEventListener("keydown", handler, true);
-  }, [onClose, goPrev, goNext, enableArrowNav]);
+  }, [type, onClose, goPrev, goNext, enableArrowNav]);
 
-  // Prevent body scroll
+  // Prevent body scroll (skip for comic — ComicViewer handles its own)
   useEffect(() => {
+    if (type === "comic") return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = prev; };
-  }, []);
+  }, [type]);
 
   const triggerDownload = () => {
     const a = document.createElement("a");
