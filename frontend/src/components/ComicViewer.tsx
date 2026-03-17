@@ -106,20 +106,37 @@ export default function ComicViewer({ filePath, onClose }: ComicViewerProps) {
     goToSpread(currentSpreadIndex + 1);
   }, [currentSpreadIndex, goToSpread]);
 
-  // Navigation by click area
+  // Toolbar auto-hide
+  const showToolbar = useCallback(() => {
+    setToolbarVisible(true);
+    if (toolbarTimer.current) clearTimeout(toolbarTimer.current);
+    toolbarTimer.current = setTimeout(() => setToolbarVisible(false), 2000);
+  }, []);
+
+  // Navigation by click area: left/right edges navigate, center toggles toolbar
   const handleAreaClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
-    const half = rect.width / 2;
+    const ratio = x / rect.width;
 
-    if (x < half) {
-      // Left side clicked
+    if (ratio < 0.3) {
+      // Left zone
       if (rtl) goNext(); else goPrev();
-    } else {
-      // Right side clicked
+    } else if (ratio > 0.7) {
+      // Right zone
       if (rtl) goPrev(); else goNext();
+    } else {
+      // Center zone: toggle toolbar
+      setToolbarVisible((v) => {
+        if (v) {
+          if (toolbarTimer.current) clearTimeout(toolbarTimer.current);
+          return false;
+        }
+        showToolbar();
+        return true;
+      });
     }
-  }, [rtl, goNext, goPrev]);
+  }, [rtl, goNext, goPrev, showToolbar]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -140,13 +157,6 @@ export default function ComicViewer({ filePath, onClose }: ComicViewerProps) {
     return () => window.removeEventListener("keydown", handler, true);
   }, [onClose, goPrev, goNext, rtl]);
 
-  // Toolbar auto-hide
-  const showToolbar = useCallback(() => {
-    setToolbarVisible(true);
-    if (toolbarTimer.current) clearTimeout(toolbarTimer.current);
-    toolbarTimer.current = setTimeout(() => setToolbarVisible(false), 2000);
-  }, []);
-
   useEffect(() => {
     showToolbar();
     return () => {
@@ -154,13 +164,6 @@ export default function ComicViewer({ filePath, onClose }: ComicViewerProps) {
     };
   }, [showToolbar]);
 
-  const handleMouseMove = useCallback(() => {
-    showToolbar();
-  }, [showToolbar]);
-
-  const handleTouchStart = useCallback(() => {
-    showToolbar();
-  }, [showToolbar]);
 
   // Prefetch next pages (hold refs to prevent GC from cancelling requests)
   const prefetchRef = useRef<HTMLImageElement[]>([]);
@@ -211,8 +214,6 @@ export default function ComicViewer({ filePath, onClose }: ComicViewerProps) {
     <div
       className="fixed inset-0 z-[100] flex flex-col"
       style={{ background: "rgba(0,0,0,0.95)" }}
-      onMouseMove={handleMouseMove}
-      onTouchStart={handleTouchStart}
     >
       {/* Toolbar */}
       <div
