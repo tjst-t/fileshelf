@@ -45,7 +45,6 @@ export default function ComicViewer({ filePath, onClose }: ComicViewerProps) {
     return () => { document.body.style.overflow = prev; };
   }, []);
 
-
   // Track landscape pages
   const markLandscape = useCallback((pageIndex: number) => {
     setLandscapePages((prev) => {
@@ -128,16 +127,14 @@ export default function ComicViewer({ filePath, onClose }: ComicViewerProps) {
       if (rtl) goPrev(); else goNext();
     } else {
       // Center zone: toggle toolbar
-      setToolbarVisible((v) => {
-        if (v) {
-          if (toolbarTimer.current) clearTimeout(toolbarTimer.current);
-          return false;
-        }
+      if (toolbarVisible) {
+        if (toolbarTimer.current) clearTimeout(toolbarTimer.current);
+        setToolbarVisible(false);
+      } else {
         showToolbar();
-        return true;
-      });
+      }
     }
-  }, [rtl, goNext, goPrev, showToolbar]);
+  }, [rtl, goNext, goPrev, showToolbar, toolbarVisible]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -164,7 +161,6 @@ export default function ComicViewer({ filePath, onClose }: ComicViewerProps) {
       if (toolbarTimer.current) clearTimeout(toolbarTimer.current);
     };
   }, [showToolbar]);
-
 
   // Prefetch next pages (hold refs to prevent GC from cancelling requests)
   const prefetchRef = useRef<HTMLImageElement[]>([]);

@@ -596,25 +596,19 @@ func (r *fileOpReaderAt) ReadAt(p []byte, off int64) (int, error) {
 // getZipPages returns cached ZIP page metadata, parsing the ZIP if not cached or stale.
 // Cache is keyed by absPath; mtime is checked to invalidate stale entries.
 func (h *Handlers) getZipPages(ctx context.Context, user fileop.User, absPath string) (*zipCacheEntry, error) {
-	// Check cache first (no fork needed if hit and still valid)
-	if cached, ok := h.zipCache.Load(absPath); ok {
-		ce := cached.(*zipCacheEntry)
-		// Validate mtime via Stat
-		entry, err := h.FileOp.Stat(ctx, user, absPath)
-		if err != nil {
-			return nil, err
-		}
-		if entry.Modified.Equal(ce.ModTime) && entry.Size == ce.Size {
-			return ce, nil
-		}
-		// Stale: delete and re-parse
-		h.zipCache.Delete(absPath)
-	}
-
-	// Stat (or re-stat after cache miss)
+	// Stat once to validate cache or feed the parser
 	entry, err := h.FileOp.Stat(ctx, user, absPath)
 	if err != nil {
 		return nil, err
+	}
+
+	// Check cache
+	if cached, ok := h.zipCache.Load(absPath); ok {
+		ce := cached.(*zipCacheEntry)
+		if entry.Modified.Equal(ce.ModTime) && entry.Size == ce.Size {
+			return ce, nil
+		}
+		h.zipCache.Delete(absPath)
 	}
 
 	// Parse the ZIP central directory
