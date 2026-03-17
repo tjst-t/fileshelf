@@ -2,6 +2,7 @@ package server
 
 import (
 	"archive/zip"
+	"compress/flate"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -659,6 +660,7 @@ func (h *Handlers) HandleZipPages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.Header().Set("Cache-Control", "private, max-age=86400")
 	writeJSON(w, map[string]interface{}{
 		"pages": images,
 		"total": len(images),
@@ -666,6 +668,8 @@ func (h *Handlers) HandleZipPages(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleZipPage serves a single image page from a ZIP file.
+// It uses DataOffset + a single ReadRange call to fetch the compressed data,
+// avoiding the per-chunk fork overhead of zip.File.Open().
 func (h *Handlers) HandleZipPage(w http.ResponseWriter, r *http.Request) {
 	user := UserFromContext(r.Context())
 	if user == nil {
@@ -717,21 +721,53 @@ func (h *Handlers) HandleZipPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	frc, err := targetFile.Open()
-	if err != nil {
-		writeJSONError(w, "failed to open image in zip: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	defer frc.Close()
-
 	ct := mime.TypeByExtension(filepath.Ext(target.Name))
 	if ct == "" {
 		ct = "application/octet-stream"
 	}
-	w.Header().Set("Content-Type", ct)
-	w.Header().Set("Content-Length", strconv.FormatUint(target.Size, 10))
 
-	io.Copy(w, frc)
+	// Get the offset of the compressed data within the ZIP file.
+	dataOffset, err := targetFile.DataOffset()
+	if err != nil {
+		writeJSONError(w, "failed to get data offset: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Read the entire compressed data in a single ReadRange call.
+	compressedSize := int64(targetFile.CompressedSize64)
+	rc, err := h.FileOp.ReadRange(r.Context(), *user, absPath, dataOffset, compressedSize)
+	if err != nil {
+		writeHelperError(w, err)
+		return
+	}
+	defer rc.Close()
+
+	w.Header().Set("Content-Type", ct)
+	w.Header().Set("Cache-Control", "private, max-age=86400, immutable")
+
+	switch targetFile.Method {
+	case zip.Store:
+		// No compression: stream directly.
+		w.Header().Set("Content-Length", strconv.FormatInt(compressedSize, 10))
+		io.Copy(w, rc)
+	case zip.Deflate:
+		// Decompress the data.
+		w.Header().Set("Content-Length", strconv.FormatUint(target.Size, 10))
+		fr := flate.NewReader(rc)
+		defer fr.Close()
+		io.Copy(w, fr)
+	default:
+		// Unsupported compression: fall back to zip.File.Open()
+		rc.Close()
+		frc, err := targetFile.Open()
+		if err != nil {
+			writeJSONError(w, "failed to open image in zip: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer frc.Close()
+		w.Header().Set("Content-Length", strconv.FormatUint(target.Size, 10))
+		io.Copy(w, frc)
+	}
 }
 
 // resolvePath converts a virtual path like "/media/movies" to the real filesystem path.
