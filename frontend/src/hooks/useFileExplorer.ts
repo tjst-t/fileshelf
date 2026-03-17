@@ -7,8 +7,16 @@ import {
   deleteFile,
   renameFile,
   copyFile,
-  uploadFile,
+  uploadFileWithProgress,
 } from "../api/client";
+
+export interface UploadProgress {
+  name: string;
+  size: number;
+  loaded: number;
+  status: "uploading" | "done" | "error";
+  error?: string;
+}
 
 export interface ClipboardState {
   entries: { name: string; path: string }[];
@@ -29,6 +37,7 @@ export function useFileExplorer() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [clipboard, setClipboard] = useState<ClipboardState | null>(null);
+  const [uploads, setUploads] = useState<Map<string, UploadProgress>>(new Map());
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const isPopState = useRef(false);
 
@@ -249,19 +258,63 @@ export function useFileExplorer() {
   );
 
   const handleUpload = useCallback(
-    async (files: FileList) => {
+    (files: FileList) => {
       for (const file of Array.from(files)) {
-        try {
-          await uploadFile(currentPath + "/" + file.name, file);
-        } catch (e) {
-          showToast((e as Error).message, "error");
-          return;
-        }
+        const key = `${file.name}-${Date.now()}-${Math.random()}`;
+        setUploads((prev) => {
+          const next = new Map(prev);
+          next.set(key, { name: file.name, size: file.size, loaded: 0, status: "uploading" });
+          return next;
+        });
+
+        const { promise } = uploadFileWithProgress(
+          currentPath + "/" + file.name,
+          file,
+          (loaded, total) => {
+            setUploads((prev) => {
+              const next = new Map(prev);
+              const entry = next.get(key);
+              if (entry) next.set(key, { ...entry, loaded, size: total });
+              return next;
+            });
+          }
+        );
+
+        promise
+          .then(() => {
+            setUploads((prev) => {
+              const next = new Map(prev);
+              const entry = next.get(key);
+              if (entry) next.set(key, { ...entry, status: "done", loaded: entry.size });
+              return next;
+            });
+            refresh();
+            setTimeout(() => {
+              setUploads((prev) => {
+                const next = new Map(prev);
+                next.delete(key);
+                return next;
+              });
+            }, 1000);
+          })
+          .catch((e) => {
+            setUploads((prev) => {
+              const next = new Map(prev);
+              const entry = next.get(key);
+              if (entry) next.set(key, { ...entry, status: "error", error: (e as Error).message });
+              return next;
+            });
+            setTimeout(() => {
+              setUploads((prev) => {
+                const next = new Map(prev);
+                next.delete(key);
+                return next;
+              });
+            }, 3000);
+          });
       }
-      showToast(`${files.length} file(s) uploaded`);
-      refresh();
     },
-    [currentPath, refresh, showToast]
+    [currentPath, refresh]
   );
 
   const handleMoveTo = useCallback(
@@ -342,5 +395,6 @@ export function useFileExplorer() {
     handleMoveTo,
     handleCopyTo,
     clearClipboard,
+    uploads,
   };
 }

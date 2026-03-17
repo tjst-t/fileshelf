@@ -49,6 +49,7 @@ export default function App() {
     handleMoveTo,
     handleCopyTo,
     clearClipboard,
+    uploads,
   } = useFileExplorer();
 
   const [version, setVersion] = useState("");
@@ -359,6 +360,7 @@ export default function App() {
               onDelete={() => setShowDeleteDialog(true)}
               onShowDropMenu={handleShowDropMenu}
               isMobile={isMobile}
+              uploads={uploads}
             />
           )}
         </div>

@@ -123,3 +123,32 @@ export async function copyFile(
   });
   await handleResponse(res);
 }
+
+export function uploadFileWithProgress(
+  path: string,
+  file: File,
+  onProgress: (loaded: number, total: number) => void
+): { promise: Promise<void>; abort: () => void } {
+  const xhr = new XMLHttpRequest();
+  const promise = new Promise<void>((resolve, reject) => {
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(e.loaded, e.total);
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve();
+      else {
+        try {
+          const body = JSON.parse(xhr.responseText);
+          reject(new Error(body.error || xhr.statusText));
+        } catch {
+          reject(new Error(xhr.statusText));
+        }
+      }
+    };
+    xhr.onerror = () => reject(new Error("Network error"));
+    xhr.onabort = () => reject(new Error("Upload cancelled"));
+    xhr.open("PUT", `/api/files/upload?path=${encodeURIComponent(path)}`);
+    xhr.send(file);
+  });
+  return { promise, abort: () => xhr.abort() };
+}

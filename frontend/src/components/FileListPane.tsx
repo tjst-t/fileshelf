@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import type { FileEntry } from "../api/client";
-import type { ClipboardState } from "../hooks/useFileExplorer";
+import type { ClipboardState, UploadProgress } from "../hooks/useFileExplorer";
 import { downloadUrl } from "../api/client";
 import { formatSize } from "../utils/format";
 import { isPreviewable } from "../utils/fileTypes";
@@ -27,6 +27,7 @@ interface FileListPaneProps {
   onDelete: () => void;
   onShowDropMenu: (paths: string[], destDir: string, x: number, y: number, sameDir: boolean) => void;
   isMobile?: boolean;
+  uploads?: Map<string, UploadProgress>;
 }
 
 type SortKey = "name" | "size" | "modified" | "perms";
@@ -86,6 +87,7 @@ export default function FileListPane({
   onDelete,
   onShowDropMenu,
   isMobile,
+  uploads,
 }: FileListPaneProps) {
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
@@ -423,6 +425,12 @@ export default function FileListPane({
     }
   };
 
+  // Filter uploads to exclude files already in entries list
+  const entryNames = new Set(entries.map((e) => e.name));
+  const activeUploads = uploads
+    ? Array.from(uploads.entries()).filter(([, u]) => !entryNames.has(u.name) || u.status === "uploading")
+    : [];
+
   const sortIndicator = (key: SortKey) => {
     if (sortKey !== key) return null;
     return sortDir === "asc" ? " \u25B4" : " \u25BE";
@@ -538,6 +546,32 @@ export default function FileListPane({
                   </div>
                 );
               })}
+              {activeUploads.map(([key, u]) => {
+                const pct = u.size > 0 ? Math.round((u.loaded / u.size) * 100) : 0;
+                return (
+                  <div key={key} className="flex items-center gap-3 px-3 py-2.5 min-h-[48px] opacity-60">
+                    <span className="flex-shrink-0 text-xl">{"\u{1F4C4}"}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm truncate text-text">{u.name}</div>
+                      {u.status === "error" ? (
+                        <div className="text-[11px] text-danger mt-0.5">Error: {u.error}</div>
+                      ) : (
+                        <div className="mt-1">
+                          <div className="h-1 rounded bg-surface-raised overflow-hidden">
+                            <div
+                              className="h-full rounded transition-all duration-200"
+                              style={{ width: `${pct}%`, backgroundColor: "var(--accent)" }}
+                            />
+                          </div>
+                          <div className="text-[11px] text-text-faint font-mono mt-0.5">
+                            {u.status === "done" ? "Done" : `${pct}%`}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -650,7 +684,8 @@ export default function FileListPane({
                 <td colSpan={4} className="py-10 text-center text-text-dark text-sm">Empty directory</td>
               </tr>
             ) : (
-              sorted.map((entry) => {
+              <>
+              {sorted.map((entry) => {
                 const isSelected = selected.has(entry.name);
                 const isCut = clipboard?.mode === "cut" && clipboard.entries.some((e) => e.name === entry.name);
                 const isDropHighlight = dropTargetName === entry.name;
@@ -718,7 +753,40 @@ export default function FileListPane({
                     </td>
                   </tr>
                 );
-              })
+              })}
+              {activeUploads.map(([key, u]) => {
+                const pct = u.size > 0 ? Math.round((u.loaded / u.size) * 100) : 0;
+                return (
+                  <tr key={key} className="border-b border-border/50 opacity-60">
+                    <td className="px-3 py-1.5 text-[13px]">
+                      <div className="flex items-center gap-2 overflow-hidden">
+                        <span className="flex-shrink-0 text-[15px]">{"\u{1F4C4}"}</span>
+                        <span className="truncate text-text">{u.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-1.5 text-right text-xs">
+                      {u.status === "error" ? (
+                        <span className="text-danger">{u.error}</span>
+                      ) : (
+                        <div className="flex items-center gap-2 justify-end">
+                          <div className="w-16 h-1 rounded bg-surface-raised overflow-hidden">
+                            <div
+                              className="h-full rounded transition-all duration-200"
+                              style={{ width: `${pct}%`, backgroundColor: "var(--accent)" }}
+                            />
+                          </div>
+                          <span className="text-text-dim font-mono">{pct}%</span>
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-3 py-1.5 text-text-dim font-mono text-xs">
+                      {u.status === "uploading" ? "Uploading..." : u.status === "done" ? "Done" : `Error: ${u.error}`}
+                    </td>
+                    <td className="px-3 py-1.5"></td>
+                  </tr>
+                );
+              })}
+              </>
             )}
           </tbody>
         </table>
