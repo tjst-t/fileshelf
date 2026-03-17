@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, lazy, Suspense } from "react";
+import { useState, useCallback, useEffect, useRef, lazy, Suspense } from "react";
 import type { FileEntry } from "./api/client";
 import { fetchVersion } from "./api/client";
 import { useFileExplorer } from "./hooks/useFileExplorer";
@@ -61,11 +61,33 @@ export default function App() {
   const [previewEntry, setPreviewEntry] = useState<FileEntry | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [richPreviewEntry, setRichPreviewEntry] = useState<FileEntry | null>(null);
+  const richPreviewOpenRef = useRef(false);
 
-  // Close rich preview when navigating to a different directory
+  // Push history entry when rich preview opens; pop closes it
   useEffect(() => {
-    setRichPreviewEntry(null);
-  }, [currentPath]);
+    const isOpen = richPreviewEntry !== null;
+    const wasOpen = richPreviewOpenRef.current;
+    richPreviewOpenRef.current = isOpen;
+
+    if (isOpen && !wasOpen) {
+      // Opening: push a history entry so back button can close
+      history.pushState({ richPreview: true }, "", location.href);
+    }
+  }, [richPreviewEntry]);
+
+  // Listen for popstate to close rich preview on browser back
+  useEffect(() => {
+    const handler = (e: PopStateEvent) => {
+      if (richPreviewOpenRef.current) {
+        e.stopImmediatePropagation();
+        setRichPreviewEntry(null);
+        richPreviewOpenRef.current = false;
+      }
+    };
+    window.addEventListener("popstate", handler, true);
+    return () => window.removeEventListener("popstate", handler, true);
+  }, []);
+
   const [treePaneWidth, setTreePaneWidth] = useState(240);
   const [previewPaneWidth, setPreviewPaneWidth] = useState(320);
   const [globalDragOver, setGlobalDragOver] = useState(false);
