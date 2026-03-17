@@ -2,7 +2,7 @@ package server
 
 import (
 	"archive/zip"
-	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -535,9 +535,6 @@ func (h *Handlers) addDirToZip(r *http.Request, user fileop.User, zw *zip.Writer
 	return nil
 }
 
-// maxZipSize is the maximum ZIP file size we'll buffer into memory (500MB).
-const maxZipSize = 500 * 1024 * 1024
-
 // zipImageEntry represents an image file found inside a ZIP archive.
 type zipImageEntry struct {
 	Index int    `json:"index"`
@@ -554,28 +551,49 @@ func isImageExt(ext string) bool {
 	return false
 }
 
-// readZipImages reads a ZIP file via FileOp.Read, buffers it into memory, and returns
-// the zip.Reader along with a sorted list of image entries. The caller must not use
-// the returned zip.Reader after the data slice is garbage collected.
+// fileOpReaderAt implements io.ReaderAt using FileOp.ReadRange.
+// Each ReadAt call forks a helper process, but zip.NewReader only makes
+// a few calls (central directory + individual file data).
+type fileOpReaderAt struct {
+	ctx    context.Context
+	fileOp fileop.FileOperator
+	user   fileop.User
+	path   string
+}
+
+func (r *fileOpReaderAt) ReadAt(p []byte, off int64) (int, error) {
+	rc, err := r.fileOp.ReadRange(r.ctx, r.user, r.path, off, int64(len(p)))
+	if err != nil {
+		return 0, err
+	}
+	defer rc.Close()
+
+	n, err := io.ReadFull(rc, p)
+	if err == io.ErrUnexpectedEOF {
+		// ReadFull returns ErrUnexpectedEOF when fewer bytes are available than requested.
+		// ReaderAt contract: return n and io.EOF when fewer bytes available at end of file.
+		err = io.EOF
+	}
+	return n, err
+}
+
+// readZipImages opens a ZIP file via FileOp.ReadRange (random access) and returns
+// the zip.Reader along with a sorted list of image entries.
 func (h *Handlers) readZipImages(w http.ResponseWriter, r *http.Request, user fileop.User, absPath string) (*zip.Reader, []zipImageEntry, bool) {
-	rc, err := h.FileOp.Read(r.Context(), user, absPath)
+	entry, err := h.FileOp.Stat(r.Context(), user, absPath)
 	if err != nil {
 		writeHelperError(w, err)
 		return nil, nil, false
 	}
-	defer rc.Close()
 
-	data, err := io.ReadAll(io.LimitReader(rc, maxZipSize+1))
-	if err != nil {
-		writeJSONError(w, "failed to read zip file: "+err.Error(), http.StatusInternalServerError)
-		return nil, nil, false
-	}
-	if len(data) > maxZipSize {
-		writeJSONError(w, "zip file too large (max 500MB)", http.StatusBadRequest)
-		return nil, nil, false
+	ra := &fileOpReaderAt{
+		ctx:    r.Context(),
+		fileOp: h.FileOp,
+		user:   user,
+		path:   absPath,
 	}
 
-	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	zr, err := zip.NewReader(ra, entry.Size)
 	if err != nil {
 		writeJSONError(w, "failed to parse zip file: "+err.Error(), http.StatusBadRequest)
 		return nil, nil, false
