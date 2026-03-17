@@ -25,7 +25,7 @@ import (
 type Handlers struct {
 	FileOp   fileop.FileOperator
 	Config   *config.Config
-	zipCache sync.Map // map[string]*zipCacheEntry (key: "path\x00mtime")
+	zipCache sync.Map // map[string]*zipCacheEntry (key: absPath)
 }
 
 // HandleVersion returns the server version.
@@ -557,7 +557,9 @@ type zipCachedPage struct {
 
 // zipCacheEntry holds cached ZIP metadata so we don't re-parse the central directory.
 type zipCacheEntry struct {
-	Pages []zipCachedPage
+	ModTime time.Time
+	Size    int64
+	Pages   []zipCachedPage
 }
 
 // isImageExt returns true if the extension (with leading dot) is a supported image type.
@@ -591,23 +593,28 @@ func (r *fileOpReaderAt) ReadAt(p []byte, off int64) (int, error) {
 	return n, err
 }
 
-func zipCacheKey(absPath string, modTime time.Time) string {
-	return absPath + "\x00" + modTime.String()
-}
-
-// getZipPages returns cached ZIP page metadata, parsing the ZIP if not cached.
+// getZipPages returns cached ZIP page metadata, parsing the ZIP if not cached or stale.
+// Cache is keyed by absPath; mtime is checked to invalidate stale entries.
 func (h *Handlers) getZipPages(ctx context.Context, user fileop.User, absPath string) (*zipCacheEntry, error) {
-	// Stat to get mtime for cache key
+	// Check cache first (no fork needed if hit and still valid)
+	if cached, ok := h.zipCache.Load(absPath); ok {
+		ce := cached.(*zipCacheEntry)
+		// Validate mtime via Stat
+		entry, err := h.FileOp.Stat(ctx, user, absPath)
+		if err != nil {
+			return nil, err
+		}
+		if entry.Modified.Equal(ce.ModTime) && entry.Size == ce.Size {
+			return ce, nil
+		}
+		// Stale: delete and re-parse
+		h.zipCache.Delete(absPath)
+	}
+
+	// Stat (or re-stat after cache miss)
 	entry, err := h.FileOp.Stat(ctx, user, absPath)
 	if err != nil {
 		return nil, err
-	}
-
-	key := zipCacheKey(absPath, entry.Modified)
-
-	// Check cache
-	if cached, ok := h.zipCache.Load(key); ok {
-		return cached.(*zipCacheEntry), nil
 	}
 
 	// Parse the ZIP central directory
@@ -657,8 +664,12 @@ func (h *Handlers) getZipPages(ctx context.Context, user fileop.User, absPath st
 		return pages[i].Name < pages[j].Name
 	})
 
-	result := &zipCacheEntry{Pages: pages}
-	h.zipCache.Store(key, result)
+	result := &zipCacheEntry{
+		ModTime: entry.Modified,
+		Size:    entry.Size,
+		Pages:   pages,
+	}
+	h.zipCache.Store(absPath, result)
 	return result, nil
 }
 
@@ -763,9 +774,7 @@ func (h *Handlers) HandleZipPage(w http.ResponseWriter, r *http.Request) {
 		defer fr.Close()
 		io.Copy(w, fr)
 	default:
-		// Unknown compression: serve compressed data as-is (browser may handle it)
-		w.Header().Set("Content-Length", strconv.FormatInt(page.CompressedSize, 10))
-		io.Copy(w, rc)
+		writeJSONError(w, fmt.Sprintf("unsupported compression method: %d", page.Method), http.StatusUnprocessableEntity)
 	}
 }
 

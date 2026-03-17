@@ -162,16 +162,18 @@ export default function ComicViewer({ filePath, onClose }: ComicViewerProps) {
     showToolbar();
   }, [showToolbar]);
 
-  // Prefetch next pages
+  // Prefetch next pages (hold refs to prevent GC from cancelling requests)
+  const prefetchRef = useRef<HTMLImageElement[]>([]);
   useEffect(() => {
     if (total === 0) return;
     const toPrefetch: number[] = [];
     for (let s = currentSpreadIndex + 1; s <= Math.min(currentSpreadIndex + 2, spreads.length - 1); s++) {
       toPrefetch.push(...spreads[s]);
     }
-    toPrefetch.forEach((idx) => {
+    prefetchRef.current = toPrefetch.map((idx) => {
       const img = new Image();
       img.src = zipPageUrl(filePath, idx);
+      return img;
     });
   }, [currentSpreadIndex, spreads, filePath, total]);
 
@@ -220,6 +222,7 @@ export default function ComicViewer({ filePath, onClose }: ComicViewerProps) {
           opacity: toolbarVisible ? 1 : 0,
           pointerEvents: toolbarVisible ? "auto" : "none",
         }}
+        onClick={(e) => e.stopPropagation()}
       >
         {/* Filename */}
         <div className="flex-1 min-w-0">
@@ -320,6 +323,7 @@ export default function ComicViewer({ filePath, onClose }: ComicViewerProps) {
           opacity: toolbarVisible ? 1 : 0,
           pointerEvents: toolbarVisible ? "auto" : "none",
         }}
+        onClick={(e) => e.stopPropagation()}
       >
         <input
           type="range"
