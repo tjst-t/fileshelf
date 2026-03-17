@@ -61,6 +61,11 @@ export default function App() {
   const [previewEntry, setPreviewEntry] = useState<FileEntry | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [richPreviewEntry, setRichPreviewEntry] = useState<FileEntry | null>(null);
+
+  // Close rich preview when navigating to a different directory
+  useEffect(() => {
+    setRichPreviewEntry(null);
+  }, [currentPath]);
   const [treePaneWidth, setTreePaneWidth] = useState(240);
   const [previewPaneWidth, setPreviewPaneWidth] = useState(320);
   const [globalDragOver, setGlobalDragOver] = useState(false);
