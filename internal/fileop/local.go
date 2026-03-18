@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+
+	"github.com/tjst-t/fileshelf/internal/helper"
 	"golang.org/x/sys/unix"
 )
 
@@ -145,6 +147,26 @@ func (l *LocalFileOperator) Stat(_ context.Context, _ User, path string) (*Entry
 		Modified: info.ModTime(),
 		Perms:    info.Mode().Perm().String(),
 	}, nil
+}
+
+func (l *LocalFileOperator) Search(_ context.Context, _ User, basePath string, query string, maxResults int) ([]SearchEntry, error) {
+	resp, err := helper.OpSearch(basePath, query, maxResults)
+	if err != nil {
+		return nil, err
+	}
+	// Convert helper.SearchEntry to fileop.SearchEntry
+	results := make([]SearchEntry, len(resp.Results))
+	for i, e := range resp.Results {
+		results[i] = SearchEntry{
+			Name:     e.Name,
+			Type:     e.Type,
+			Size:     e.Size,
+			Modified: e.Modified,
+			Perms:    e.Perms,
+			Dir:      e.Dir,
+		}
+	}
+	return results, nil
 }
 
 func copyFile(src, dst string) error {

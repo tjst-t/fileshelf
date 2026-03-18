@@ -23,18 +23,21 @@ var AllowedOps = map[string]bool{
 	"rename": true,
 	"copy":   true,
 	"stat":   true,
+	"search": true,
 }
 
 // Params holds the parsed command-line arguments.
 type Params struct {
-	Op     string
-	UID    int
-	GID    int
-	Path   string
-	Dest   string
-	Bases  []string
-	Offset int64
-	Length int64
+	Op         string
+	UID        int
+	GID        int
+	Path       string
+	Dest       string
+	Bases      []string
+	Offset     int64
+	Length     int64
+	Query      string
+	MaxResults int
 }
 
 // Run executes the helper operation and writes results to stdout/stderr.
@@ -144,6 +147,18 @@ func execute(p Params, stdin io.Reader, stdout, stderr io.Writer) int {
 
 	case "stat":
 		result, err := OpStat(p.Path)
+		if err != nil {
+			return writeOpError(stderr, err)
+		}
+		writeJSON(stdout, result)
+		return ExitOK
+
+	case "search":
+		if p.Query == "" {
+			writeError(stderr, "query is required for search")
+			return ExitBadArgs
+		}
+		result, err := OpSearch(p.Path, p.Query, p.MaxResults)
 		if err != nil {
 			return writeOpError(stderr, err)
 		}

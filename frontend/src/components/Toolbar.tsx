@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useCallback, useEffect } from "react";
 import type { UploadItem } from "../hooks/useFileExplorer";
 import Breadcrumb from "./Breadcrumb";
 
@@ -12,6 +12,12 @@ interface ToolbarProps {
   showPreview: boolean;
   onTogglePreview: () => void;
   isMobile?: boolean;
+  searchQuery?: string;
+  searchLoading?: boolean;
+  onSearch?: (query: string, pushHistory?: boolean) => void;
+  onClearSearch?: () => void;
+  searchOpen?: boolean;
+  onSearchOpenChange?: (open: boolean) => void;
 }
 
 export default function Toolbar({
@@ -24,11 +30,68 @@ export default function Toolbar({
   showPreview,
   onTogglePreview,
   isMobile,
+  searchQuery,
+  searchLoading,
+  onSearch,
+  onClearSearch,
+  searchOpen,
+  onSearchOpenChange,
 }: ToolbarProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [folderName, setFolderName] = useState("");
+  const [showSearchInput, setShowSearchInput] = useState(false);
+  const [searchInputValue, setSearchInputValue] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  // Cleanup debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    };
+  }, []);
+
+  // Sync external searchOpen prop
+  useEffect(() => {
+    if (searchOpen && !showSearchInput) {
+      setShowSearchInput(true);
+      setTimeout(() => searchInputRef.current?.focus(), 0);
+    }
+  }, [searchOpen, showSearchInput]);
+
+  // Sync external searchQuery to local input
+  useEffect(() => {
+    if (searchQuery === undefined) return;
+    if (searchQuery) {
+      // Search restored (e.g., from history) — show input with the query
+      setSearchInputValue(searchQuery);
+      setShowSearchInput(true);
+    } else {
+      setSearchInputValue("");
+      setShowSearchInput(false);
+    }
+  }, [searchQuery]);
+
+  const handleSearchInputChange = useCallback((value: string) => {
+    setSearchInputValue(value);
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    if (!value) {
+      onClearSearch?.();
+      return;
+    }
+    searchDebounceRef.current = setTimeout(() => {
+      onSearch?.(value);
+    }, 300);
+  }, [onSearch, onClearSearch]);
+
+  const handleSearchClose = useCallback(() => {
+    setShowSearchInput(false);
+    setSearchInputValue("");
+    onClearSearch?.();
+    onSearchOpenChange?.(false);
+  }, [onClearSearch, onSearchOpenChange]);
 
   const handleNewFolder = () => {
     if (folderName.trim()) {
@@ -62,7 +125,39 @@ export default function Toolbar({
       </button>
 
       <div className="flex-1 min-w-0">
-        <Breadcrumb currentPath={currentPath} onNavigate={onNavigate} />
+        {showSearchInput ? (
+          <div className="flex items-center gap-1 px-1">
+            <span className="text-text-muted text-xs">🔍</span>
+            <input
+              ref={searchInputRef}
+              className="flex-1 min-w-0 px-2 py-1 md:py-0.5 text-[13px] font-mono bg-bg border border-accent rounded text-text focus:outline-none"
+              value={searchInputValue}
+              onChange={(e) => handleSearchInputChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") handleSearchClose();
+                if (e.key === "Enter" && searchInputValue.length >= 2) onSearch?.(searchInputValue, true);
+              }}
+              placeholder="Search file names..."
+              autoFocus
+            />
+            {searchLoading && (
+              <span className="text-text-muted text-xs animate-pulse">...</span>
+            )}
+            <button
+              className="px-1.5 py-0.5 rounded text-text-muted hover:text-text hover:bg-surface-raised cursor-pointer text-xs"
+              onClick={handleSearchClose}
+            >
+              ✕
+            </button>
+          </div>
+        ) : (
+          <Breadcrumb
+            currentPath={currentPath}
+            onNavigate={onNavigate}
+            searchQuery={searchQuery}
+            onClearSearch={onClearSearch}
+          />
+        )}
       </div>
 
       {currentPath && (
@@ -150,6 +245,20 @@ export default function Toolbar({
             }}
           />
         </>
+      )}
+
+      {!showSearchInput && (
+        <button
+          className={`${btnBase} text-text-muted hover:text-text hover:bg-surface-raised`}
+          onClick={() => {
+            setShowSearchInput(true);
+            onSearchOpenChange?.(true);
+            setTimeout(() => searchInputRef.current?.focus(), 0);
+          }}
+          title="Search files"
+        >
+          {isMobile ? "🔍" : "🔍 Search"}
+        </button>
       )}
 
       {!isMobile && <div className="w-px h-5 bg-border-subtle" />}

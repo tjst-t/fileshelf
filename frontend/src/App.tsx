@@ -51,6 +51,11 @@ export default function App() {
     handleCopyTo,
     clearClipboard,
     uploads,
+    searchQuery,
+    searchResults,
+    searchLoading,
+    handleSearch,
+    clearSearch,
   } = useFileExplorer();
 
   const [version, setVersion] = useState("");
@@ -63,6 +68,8 @@ export default function App() {
   const [previewEntry, setPreviewEntry] = useState<FileEntry | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [richPreviewEntry, setRichPreviewEntry] = useState<FileEntry | null>(null);
+  // Override currentPath for previews launched from search results
+  const [previewPathOverride, setPreviewPathOverride] = useState<string | null>(null);
   const richPreviewOpenRef = useRef(false);
 
   // Push history entry when rich preview opens; pop closes it
@@ -90,6 +97,7 @@ export default function App() {
     return () => window.removeEventListener("popstate", handler, true);
   }, []);
 
+  const [searchOpen, setSearchOpen] = useState(false);
   const [treePaneWidth, setTreePaneWidth] = useState(240);
   const [previewPaneWidth, setPreviewPaneWidth] = useState(320);
   const [globalDragOver, setGlobalDragOver] = useState(false);
@@ -134,13 +142,15 @@ export default function App() {
     [currentPath, navigate, toggleSelect]
   );
 
-  const handlePreview = useCallback((entry: FileEntry) => {
+  const handlePreview = useCallback((entry: FileEntry, pathOverride?: string) => {
     setPreviewEntry(entry);
+    setPreviewPathOverride(pathOverride ?? null);
     setShowPreview(true);
   }, []);
 
-  const handleRichPreview = useCallback((entry: FileEntry) => {
+  const handleRichPreview = useCallback((entry: FileEntry, pathOverride?: string) => {
     setRichPreviewEntry(entry);
+    setPreviewPathOverride(pathOverride ?? null);
   }, []);
 
   const handleTreeResize = useCallback((delta: number) => {
@@ -216,6 +226,9 @@ export default function App() {
       } else if (e.key === "F5" || (mod && e.key === "r")) {
         e.preventDefault();
         refresh();
+      } else if (mod && e.key === "f") {
+        e.preventDefault();
+        setSearchOpen(true);
       } else if (e.key === " ") {
         e.preventDefault();
         setShowPreview((p) => !p);
@@ -295,6 +308,12 @@ export default function App() {
         showPreview={showPreview}
         onTogglePreview={() => setShowPreview((p) => !p)}
         isMobile={isMobile}
+        searchQuery={searchQuery}
+        searchLoading={searchLoading}
+        onSearch={handleSearch}
+        onClearSearch={clearSearch}
+        searchOpen={searchOpen}
+        onSearchOpenChange={setSearchOpen}
       />
 
       {/* Clipboard bar */}
@@ -366,6 +385,8 @@ export default function App() {
               isMobile={isMobile}
               uploads={uploads}
               shares={shares}
+              searchResults={searchResults}
+              searchLoading={searchLoading}
             />
           )}
         </div>
@@ -378,8 +399,8 @@ export default function App() {
               <PreviewPane
                 entry={previewEntry}
                 selectedEntries={selectedEntries}
-                currentPath={currentPath}
-                onClose={() => setShowPreview(false)}
+                currentPath={previewPathOverride ?? currentPath}
+                onClose={() => { setShowPreview(false); setPreviewPathOverride(null); }}
                 isMobile={isMobile}
               />
             </div>
@@ -423,10 +444,10 @@ export default function App() {
         <Suspense fallback={null}>
           <RichPreviewModal
             entry={richPreviewEntry}
-            currentPath={currentPath}
-            allEntries={entries}
-            onClose={() => setRichPreviewEntry(null)}
-            onNavigateEntry={setRichPreviewEntry}
+            currentPath={previewPathOverride ?? currentPath}
+            allEntries={previewPathOverride ? [richPreviewEntry] : entries}
+            onClose={() => { setRichPreviewEntry(null); setPreviewPathOverride(null); }}
+            onNavigateEntry={previewPathOverride ? () => {} : setRichPreviewEntry}
           />
         </Suspense>
       )}

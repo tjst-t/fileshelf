@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
-import type { FileEntry, Share } from "../api/client";
+import type { FileEntry, Share, SearchResultEntry } from "../api/client";
 import type { ClipboardState, UploadProgress, UploadItem } from "../hooks/useFileExplorer";
 import { downloadUrl } from "../api/client";
 import { formatSize } from "../utils/format";
@@ -18,8 +18,8 @@ interface FileListPaneProps {
   onSelect: (name: string, multi: boolean) => void;
   onSelectRange: (name: string) => void;
   onSetSelected: (names: Set<string>) => void;
-  onPreview: (entry: FileEntry) => void;
-  onRichPreview: (entry: FileEntry) => void;
+  onPreview: (entry: FileEntry, pathOverride?: string) => void;
+  onRichPreview: (entry: FileEntry, pathOverride?: string) => void;
   onRename: (oldName: string, newName: string) => void;
   onDrop: (items: UploadItem[]) => void;
   onCopy: () => void;
@@ -30,6 +30,8 @@ interface FileListPaneProps {
   isMobile?: boolean;
   uploads?: Map<string, UploadProgress>;
   shares?: Share[];
+  searchResults?: SearchResultEntry[] | null;
+  searchLoading?: boolean;
 }
 
 type SortKey = "name" | "size" | "modified" | "perms";
@@ -69,6 +71,15 @@ function fileIcon(entry: FileEntry): string {
   return icons[ext || ""] || "\u{1F4C4}";
 }
 
+function triggerDownload(url: string) {
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
 export default function FileListPane({
   entries,
   selected,
@@ -91,6 +102,8 @@ export default function FileListPane({
   isMobile,
   uploads,
   shares,
+  searchResults,
+  searchLoading,
 }: FileListPaneProps) {
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
@@ -297,15 +310,6 @@ export default function FileListPane({
     setContextMenu({ x: e.clientX, y: e.clientY, items });
   };
 
-  const triggerDownload = (url: string) => {
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  };
-
   const buildContextMenuItems = (entry: FileEntry): ContextMenuItem[] => {
     const multi = selected.has(entry.name) ? selected.size > 1 : false;
     const items: ContextMenuItem[] = [];
@@ -439,6 +443,223 @@ export default function FileListPane({
     if (sortKey !== key) return null;
     return sortDir === "asc" ? " \u25B4" : " \u25BE";
   };
+
+  // Search results view
+  if (searchResults !== undefined && searchResults !== null) {
+    const thClass = "px-3 py-2 text-[11px] uppercase tracking-[0.05em] font-semibold select-none whitespace-nowrap border-b border-border text-text-dim";
+
+    const toFileEntry = (r: SearchResultEntry): FileEntry => ({
+      name: r.name, type: r.type, size: r.size, modified: r.modified, perms: r.perms,
+    });
+
+    const handleSearchDoubleClick = (result: SearchResultEntry) => {
+      if (result.type === "dir") {
+        onNavigate(result.dir + "/" + result.name);
+      } else if (isPreviewable(result.name)) {
+        onRichPreview(toFileEntry(result), result.dir);
+      } else {
+        onPreview(toFileEntry(result), result.dir);
+      }
+    };
+
+    const handleSearchDragStart = (e: React.DragEvent, result: SearchResultEntry) => {
+      const fullPath = result.dir + "/" + result.name;
+      // If dragged item is selected, drag all selected; otherwise just this one
+      let paths: string[];
+      if (selected.has(fullPath)) {
+        paths = Array.from(selected);
+      } else {
+        paths = [fullPath];
+      }
+      e.dataTransfer.setData("application/x-fileshelf", JSON.stringify({ paths, sourceDir: "__search__" }));
+      e.dataTransfer.effectAllowed = "copyMove";
+    };
+
+    const handleSearchContextMenu = (e: React.MouseEvent, result: SearchResultEntry) => {
+      e.preventDefault();
+      const fullPath = result.dir + "/" + result.name;
+      if (!selected.has(fullPath)) {
+        onSelect(fullPath, false);
+      }
+      const multi = selected.has(fullPath) ? selected.size > 1 : false;
+      const items: ContextMenuItem[] = [];
+
+      // Open folder
+      if (result.type === "dir" && !multi) {
+        items.push({
+          icon: "\u{1F4C2}",
+          label: "Open",
+          action: () => onNavigate(result.dir + "/" + result.name),
+        });
+      }
+
+      // Preview
+      if (!multi && result.type === "file" && isPreviewable(result.name)) {
+        items.push({
+          icon: "\u{1F441}",
+          label: "Preview",
+          action: () => onRichPreview(toFileEntry(result), result.dir),
+        });
+      }
+
+      // Jump to location
+      items.push({
+        icon: "\u{1F4CD}",
+        label: "Jump to location",
+        action: () => onNavigate(result.dir),
+      });
+
+      // Download
+      if (multi) {
+        const paths = Array.from(selected);
+        items.push({
+          icon: "\u2B07\uFE0F",
+          label: `Download ${selected.size} items`,
+          action: () => triggerDownload(`/api/files/download-zip?paths=${encodeURIComponent(paths.join(","))}`),
+        });
+      } else if (result.type === "dir") {
+        items.push({
+          icon: "\u2B07\uFE0F",
+          label: "Download as zip",
+          action: () => triggerDownload(`/api/files/download-zip?paths=${encodeURIComponent(fullPath)}`),
+        });
+      } else {
+        items.push({
+          icon: "\u2B07\uFE0F",
+          label: "Download",
+          action: () => triggerDownload(downloadUrl(fullPath)),
+        });
+      }
+
+      items.push({ icon: "", label: "", action: () => {}, divider: true });
+
+      items.push({
+        icon: "\u{1F4CB}",
+        label: "Copy",
+        shortcut: "\u2318C",
+        action: onCopy,
+      });
+      items.push({
+        icon: "\u2702\uFE0F",
+        label: "Cut",
+        shortcut: "\u2318X",
+        action: onCut,
+      });
+
+      items.push({ icon: "", label: "", action: () => {}, divider: true });
+
+      items.push({
+        icon: "\u{1F5D1}",
+        label: multi ? `Delete ${selected.size} items` : "Delete",
+        danger: true,
+        action: onDelete,
+      });
+
+      setContextMenu({ x: e.clientX, y: e.clientY, items });
+    };
+
+    return (
+      <div className="h-full flex flex-col overflow-hidden">
+        <div className="flex-1 overflow-auto">
+          <table className="w-full border-collapse table-fixed select-none">
+            <thead className="sticky top-0 bg-surface-alt z-[2]">
+              <tr>
+                <th className={`${thClass} text-left w-[35%]`}>Name</th>
+                <th className={`${thClass} text-left w-[30%]`}>Location</th>
+                <th className={`${thClass} text-right w-[12%]`}>Size</th>
+                <th className={`${thClass} text-left w-[23%]`}>Modified</th>
+              </tr>
+            </thead>
+            <tbody>
+              {searchLoading ? (
+                <tr>
+                  <td colSpan={4} className="py-8 text-center text-text-muted text-sm">Searching...</td>
+                </tr>
+              ) : searchResults.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="py-10 text-center text-text-dark text-sm">No results found</td>
+                </tr>
+              ) : (
+                searchResults.map((result, i) => {
+                  const fullPath = result.dir + "/" + result.name;
+                  const isSelected = selected.has(fullPath);
+                  return (
+                    <tr
+                      key={`${fullPath}-${i}`}
+                      data-row-name={fullPath}
+                      className={`cursor-pointer transition-colors duration-100 border-b border-border/50 ${
+                        isSelected ? "bg-accent/12" : "hover:bg-hover-row"
+                      }`}
+                      draggable
+                      onDragStart={(e) => handleSearchDragStart(e, result)}
+                      onClick={(e) => {
+                        if (e.shiftKey) {
+                          // Range select within search results
+                          const keys = searchResults.map(r => r.dir + "/" + r.name);
+                          if (selected.size === 0) {
+                            onSetSelected(new Set([fullPath]));
+                          } else {
+                            const last = Array.from(selected).pop()!;
+                            const from = keys.indexOf(last);
+                            const to = keys.indexOf(fullPath);
+                            if (from === -1 || to === -1) {
+                              onSetSelected(new Set([fullPath]));
+                            } else {
+                              const [s, end] = from < to ? [from, to] : [to, from];
+                              onSetSelected(new Set([...selected, ...keys.slice(s, end + 1)]));
+                            }
+                          }
+                        } else {
+                          onSelect(fullPath, e.ctrlKey || e.metaKey);
+                        }
+                      }}
+                      onDoubleClick={() => handleSearchDoubleClick(result)}
+                      onContextMenu={(e) => handleSearchContextMenu(e, result)}
+                    >
+                      <td className="px-3 py-1.5 text-[13px]">
+                        <div className="flex items-center gap-2 overflow-hidden">
+                          <span className="flex-shrink-0 text-[15px]">{fileIcon({ ...result, modified: result.modified } as FileEntry)}</span>
+                          <span className={`truncate ${result.type === "dir" ? "text-accent" : "text-text"}`}>
+                            {result.name}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-1.5 text-[12px]">
+                        <button
+                          className="text-accent hover:underline truncate block max-w-full text-left cursor-pointer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onNavigate(result.dir);
+                          }}
+                          title={result.dir}
+                        >
+                          {result.dir}
+                        </button>
+                      </td>
+                      <td className="px-3 py-1.5 text-right text-text-dim font-mono text-xs">
+                        {result.type === "dir" ? "\u2014" : formatSize(result.size)}
+                      </td>
+                      <td className="px-3 py-1.5 text-text-dim font-mono text-xs">
+                        {formatDate(result.modified)}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+        {contextMenu && (
+          <ContextMenu
+            x={contextMenu.x}
+            y={contextMenu.y}
+            items={contextMenu.items}
+            onClose={() => setContextMenu(null)}
+          />
+        )}
+      </div>
+    );
+  }
 
   if (!currentPath) {
     return (

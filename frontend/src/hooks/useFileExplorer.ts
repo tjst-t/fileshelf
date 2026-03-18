@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import type { Share, FileEntry } from "../api/client";
+import type { Share, FileEntry, SearchResultEntry } from "../api/client";
 import {
   fetchShares,
   fetchFiles,
@@ -8,6 +8,7 @@ import {
   renameFile,
   copyFile,
   uploadFileWithProgress,
+  searchFiles,
 } from "../api/client";
 
 export interface UploadProgress {
@@ -29,10 +30,21 @@ export interface ClipboardState {
   mode: "copy" | "cut";
 }
 
+const SEARCH_HASH_PREFIX = "#search:";
+
 function getPathFromHash(): string {
   const hash = window.location.hash;
   if (!hash || hash === "#" || hash === "#/") return "";
+  if (hash.startsWith(SEARCH_HASH_PREFIX)) return ""; // search hash handled separately
   return decodeURIComponent(hash.slice(1)); // remove leading '#'
+}
+
+function getSearchFromHash(): string {
+  const hash = window.location.hash;
+  if (hash.startsWith(SEARCH_HASH_PREFIX)) {
+    return decodeURIComponent(hash.slice(SEARCH_HASH_PREFIX.length));
+  }
+  return "";
 }
 
 export function useFileExplorer() {
@@ -46,6 +58,11 @@ export function useFileExplorer() {
   const [uploads, setUploads] = useState<Map<string, UploadProgress>>(new Map());
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const isPopState = useRef(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<SearchResultEntry[] | null>(null);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const searchQueryRef = useRef("");
+  const searchActiveRef = useRef(false);
 
   const showToast = useCallback((message: string, type: "success" | "error" = "success") => {
     setToast({ message, type });
@@ -61,7 +78,49 @@ export function useFileExplorer() {
     }
   }, []);
 
+  const handleSearch = useCallback(async (query: string, pushHistory = false) => {
+    setSearchQuery(query);
+    searchQueryRef.current = query;
+    if (!query || query.length < 2) {
+      setSearchResults(null);
+      searchActiveRef.current = false;
+      return;
+    }
+    setSearchLoading(true);
+    try {
+      const data = await searchFiles(query);
+      setSearchResults(data.results);
+      searchActiveRef.current = true;
+      setSelected(new Set());
+      if (pushHistory && !isPopState.current) {
+        window.history.pushState(null, "", SEARCH_HASH_PREFIX + encodeURIComponent(query));
+      }
+      isPopState.current = false;
+    } catch (e) {
+      showToast((e as Error).message, "error");
+    } finally {
+      setSearchLoading(false);
+    }
+  }, [showToast]);
+
+  const clearSearch = useCallback(() => {
+    setSearchQuery("");
+    setSearchResults(null);
+    searchQueryRef.current = "";
+    searchActiveRef.current = false;
+  }, []);
+
   const navigate = useCallback(async (path: string) => {
+    // If leaving search mode, save search to history so the user can go back
+    if (searchActiveRef.current && searchQueryRef.current && !isPopState.current) {
+      window.history.pushState(null, "", SEARCH_HASH_PREFIX + encodeURIComponent(searchQueryRef.current));
+    }
+    // Clear search mode on navigation
+    setSearchQuery("");
+    setSearchResults(null);
+    searchQueryRef.current = "";
+    searchActiveRef.current = false;
+
     if (!path) {
       // Navigate to root = show "Select a share" screen
       setCurrentPath("");
@@ -181,27 +240,29 @@ export function useFileExplorer() {
 
   const handleCopy = useCallback(() => {
     if (selected.size === 0) return;
+    const isSearchMode = searchResults !== null;
     setClipboard({
-      entries: Array.from(selected).map((name) => ({
-        name,
-        path: currentPath + "/" + name,
+      entries: Array.from(selected).map((key) => ({
+        name: key.split("/").pop()!,
+        path: isSearchMode ? key : currentPath + "/" + key,
       })),
       mode: "copy",
     });
     showToast(`${selected.size} item(s) copied`);
-  }, [selected, currentPath, showToast]);
+  }, [selected, currentPath, searchResults, showToast]);
 
   const handleCut = useCallback(() => {
     if (selected.size === 0) return;
+    const isSearchMode = searchResults !== null;
     setClipboard({
-      entries: Array.from(selected).map((name) => ({
-        name,
-        path: currentPath + "/" + name,
+      entries: Array.from(selected).map((key) => ({
+        name: key.split("/").pop()!,
+        path: isSearchMode ? key : currentPath + "/" + key,
       })),
       mode: "cut",
     });
     showToast(`${selected.size} item(s) cut`);
-  }, [selected, currentPath, showToast]);
+  }, [selected, currentPath, searchResults, showToast]);
 
   const handlePaste = useCallback(async () => {
     if (!clipboard) return;
@@ -224,9 +285,11 @@ export function useFileExplorer() {
 
   const handleDelete = useCallback(async () => {
     if (selected.size === 0) return;
-    for (const name of selected) {
+    const isSearchMode = searchResults !== null;
+    for (const key of selected) {
       try {
-        await deleteFile(currentPath + "/" + name);
+        const path = isSearchMode ? key : currentPath + "/" + key;
+        await deleteFile(path);
       } catch (e) {
         showToast((e as Error).message, "error");
         return;
@@ -234,8 +297,13 @@ export function useFileExplorer() {
     }
     showToast(`${selected.size} item(s) deleted`);
     setSelected(new Set());
-    refresh();
-  }, [selected, currentPath, refresh, showToast]);
+    if (isSearchMode && searchQuery) {
+      // Re-run search to refresh results
+      handleSearch(searchQuery);
+    } else {
+      refresh();
+    }
+  }, [selected, currentPath, searchResults, searchQuery, refresh, showToast, handleSearch]);
 
   const handleMkdir = useCallback(
     async (name: string) => {
@@ -392,22 +460,33 @@ export function useFileExplorer() {
 
   useEffect(() => {
     loadShares().then(() => {
+      const searchQ = getSearchFromHash();
+      if (searchQ) {
+        handleSearch(searchQ);
+        return;
+      }
       const initialPath = getPathFromHash();
       if (initialPath) {
         navigate(initialPath);
       }
     });
-  }, [loadShares, navigate]);
+  }, [loadShares, navigate, handleSearch]);
 
   useEffect(() => {
     const handlePopState = () => {
+      const searchQ = getSearchFromHash();
+      if (searchQ) {
+        isPopState.current = true;
+        handleSearch(searchQ);
+        return;
+      }
       const path = getPathFromHash();
       isPopState.current = true;
       navigate(path);
     };
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
-  }, [navigate]);
+  }, [navigate, handleSearch]);
 
   return {
     shares,
@@ -437,5 +516,10 @@ export function useFileExplorer() {
     handleCopyTo,
     clearClipboard,
     uploads,
+    searchQuery,
+    searchResults,
+    searchLoading,
+    handleSearch,
+    clearSearch,
   };
 }

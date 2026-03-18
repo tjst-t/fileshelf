@@ -779,6 +779,99 @@ func (h *Handlers) HandleZipPage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// HandleFilesSearch searches for files by name across accessible shares.
+func (h *Handlers) HandleFilesSearch(w http.ResponseWriter, r *http.Request) {
+	user := UserFromContext(r.Context())
+	if user == nil {
+		writeJSONError(w, "not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	query := r.URL.Query().Get("q")
+	if len(query) < 2 {
+		writeJSONError(w, "query must be at least 2 characters", http.StatusBadRequest)
+		return
+	}
+	if len(query) > 200 {
+		writeJSONError(w, "query too long", http.StatusBadRequest)
+		return
+	}
+	if strings.ContainsRune(query, 0) {
+		writeJSONError(w, "invalid query", http.StatusBadRequest)
+		return
+	}
+
+	maxResults := 200
+
+	type shareResult struct {
+		shareName string
+		results   []fileop.SearchEntry
+		err       error
+	}
+
+	// Search accessible shares concurrently
+	var accessibleShares []config.Share
+	for _, s := range h.Config.Shares {
+		if err := h.FileOp.Access(r.Context(), *user, s.Path); err == nil {
+			accessibleShares = append(accessibleShares, s)
+		}
+	}
+
+	ch := make(chan shareResult, len(accessibleShares))
+	for _, s := range accessibleShares {
+		go func(s config.Share) {
+			results, err := h.FileOp.Search(r.Context(), *user, s.Path, query, maxResults)
+			ch <- shareResult{shareName: s.Name, results: results, err: err}
+		}(s)
+	}
+
+	type resultEntry struct {
+		Name     string `json:"name"`
+		Type     string `json:"type"`
+		Size     int64  `json:"size"`
+		Modified string `json:"modified"`
+		Perms    string `json:"perms"`
+		Dir      string `json:"dir"` // virtual directory path, e.g. "/media/movies/action"
+	}
+
+	var allResults []resultEntry
+	for range accessibleShares {
+		sr := <-ch
+		if sr.err != nil {
+			continue
+		}
+		for _, entry := range sr.results {
+			dir := "/" + sr.shareName
+			if entry.Dir != "" {
+				dir += "/" + entry.Dir
+			}
+			allResults = append(allResults, resultEntry{
+				Name:     entry.Name,
+				Type:     entry.Type,
+				Size:     entry.Size,
+				Modified: entry.Modified,
+				Perms:    entry.Perms,
+				Dir:      dir,
+			})
+			if len(allResults) >= maxResults {
+				break
+			}
+		}
+		if len(allResults) >= maxResults {
+			break
+		}
+	}
+
+	if allResults == nil {
+		allResults = []resultEntry{}
+	}
+
+	writeJSON(w, map[string]interface{}{
+		"results": allResults,
+		"query":   query,
+	})
+}
+
 // resolvePath converts a virtual path like "/media/movies" to the real filesystem path.
 // Virtual paths start with the share name as the first component.
 func (h *Handlers) resolvePath(virtualPath string) string {

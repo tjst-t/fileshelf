@@ -27,8 +27,10 @@ type mockFileOperator struct {
 	deleteErr error
 	renameErr error
 	copyErr   error
-	statEntry *fileop.Entry
-	statErr   error
+	statEntry     *fileop.Entry
+	statErr       error
+	searchResults []fileop.SearchEntry
+	searchErr     error
 }
 
 func (m *mockFileOperator) Access(_ context.Context, _ fileop.User, _ string) error {
@@ -76,6 +78,9 @@ func (m *mockFileOperator) ReadRange(_ context.Context, _ fileop.User, _ string,
 }
 func (m *mockFileOperator) Stat(_ context.Context, _ fileop.User, _ string) (*fileop.Entry, error) {
 	return m.statEntry, m.statErr
+}
+func (m *mockFileOperator) Search(_ context.Context, _ fileop.User, _ string, _ string, _ int) ([]fileop.SearchEntry, error) {
+	return m.searchResults, m.searchErr
 }
 
 func testConfig() *config.Config {
@@ -493,6 +498,105 @@ func TestNoAuth(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	h.HandleShares(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("status=%d, want %d", rr.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestHandleFilesSearchQueryTooShort(t *testing.T) {
+	mock := &mockFileOperator{}
+	h := &Handlers{FileOp: mock, Config: testConfig()}
+
+	req := httptest.NewRequest("GET", "/api/files/search?q=a", nil)
+	req = withUser(req, testUser())
+	rr := httptest.NewRecorder()
+
+	h.HandleFilesSearch(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("status=%d, want %d", rr.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleFilesSearchQueryMissing(t *testing.T) {
+	mock := &mockFileOperator{}
+	h := &Handlers{FileOp: mock, Config: testConfig()}
+
+	req := httptest.NewRequest("GET", "/api/files/search", nil)
+	req = withUser(req, testUser())
+	rr := httptest.NewRecorder()
+
+	h.HandleFilesSearch(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("status=%d, want %d", rr.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleFilesSearchSuccess(t *testing.T) {
+	mock := &mockFileOperator{
+		searchResults: []fileop.SearchEntry{
+			{Name: "movie.mp4", Type: "file", Size: 1024, Modified: "2025-01-15T10:00:00Z", Perms: "-rwxr-xr-x", Dir: "movies"},
+		},
+	}
+	h := &Handlers{FileOp: mock, Config: testConfig()}
+
+	req := httptest.NewRequest("GET", "/api/files/search?q=movie", nil)
+	req = withUser(req, testUser())
+	rr := httptest.NewRecorder()
+
+	h.HandleFilesSearch(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("status=%d, want %d", rr.Code, http.StatusOK)
+	}
+
+	var resp struct {
+		Results []struct {
+			Name string `json:"name"`
+			Dir  string `json:"dir"`
+		} `json:"results"`
+		Query string `json:"query"`
+	}
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode error: %v", err)
+	}
+
+	if resp.Query != "movie" {
+		t.Errorf("query=%q, want %q", resp.Query, "movie")
+	}
+
+	// Both shares are accessible (mock.accessErr is nil), so we get results from both
+	// Each share returns the same mock results (order is non-deterministic due to goroutines)
+	if len(resp.Results) != 2 {
+		t.Fatalf("results=%d, want 2 (one per share)", len(resp.Results))
+	}
+
+	// Collect dirs to check both shares contributed (order is non-deterministic)
+	dirs := map[string]bool{}
+	for _, r := range resp.Results {
+		dirs[r.Dir] = true
+		if r.Name != "movie.mp4" {
+			t.Errorf("unexpected name=%q", r.Name)
+		}
+	}
+	if !dirs["/media/movies"] {
+		t.Error("missing results from media share")
+	}
+	if !dirs["/docs/movies"] {
+		t.Error("missing results from docs share")
+	}
+}
+
+func TestHandleFilesSearchNoAuth(t *testing.T) {
+	mock := &mockFileOperator{}
+	h := &Handlers{FileOp: mock, Config: testConfig()}
+
+	req := httptest.NewRequest("GET", "/api/files/search?q=test", nil)
+	rr := httptest.NewRecorder()
+
+	h.HandleFilesSearch(rr, req)
 
 	if rr.Code != http.StatusUnauthorized {
 		t.Errorf("status=%d, want %d", rr.Code, http.StatusUnauthorized)

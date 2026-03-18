@@ -22,6 +22,16 @@ type Entry struct {
 	Perms    string    `json:"perms"`
 }
 
+// SearchEntry represents a file/directory found by search.
+type SearchEntry struct {
+	Name     string `json:"name"`
+	Type     string `json:"type"`
+	Size     int64  `json:"size"`
+	Modified string `json:"modified"`
+	Perms    string `json:"perms"`
+	Dir      string `json:"dir"` // relative directory path within the searched base
+}
+
 // FileOperator defines all file operations.
 type FileOperator interface {
 	Access(ctx context.Context, user User, path string) error
@@ -35,4 +45,5 @@ type FileOperator interface {
 	Rename(ctx context.Context, user User, oldPath, newPath string) error
 	Copy(ctx context.Context, user User, srcPath, dstPath string) error
 	Stat(ctx context.Context, user User, path string) (*Entry, error)
+	Search(ctx context.Context, user User, basePath string, query string, maxResults int) ([]SearchEntry, error)
 }

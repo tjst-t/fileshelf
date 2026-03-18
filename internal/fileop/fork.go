@@ -115,6 +115,39 @@ func (f *ForkFileOperator) Stat(ctx context.Context, user User, path string) (*E
 	return &entry, nil
 }
 
+func (f *ForkFileOperator) Search(ctx context.Context, user User, basePath string, query string, maxResults int) ([]SearchEntry, error) {
+	timeout := 60 * time.Second
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	args := []string{
+		"-op", "search",
+		"-uid", fmt.Sprintf("%d", user.UID),
+		"-gid", fmt.Sprintf("%d", user.GID),
+		"-path", basePath,
+		"-bases", strings.Join(f.Bases, ","),
+		"-query", query,
+		"-max-results", fmt.Sprintf("%d", maxResults),
+	}
+	cmd := exec.CommandContext(ctx, f.HelperPath, args...)
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return nil, f.parseError(err, stderr.Bytes(), stdout.Bytes())
+	}
+
+	var resp struct {
+		Results []SearchEntry `json:"results"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &resp); err != nil {
+		return nil, fmt.Errorf("parsing search output: %w", err)
+	}
+	return resp.Results, nil
+}
+
 func (f *ForkFileOperator) contextWithTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
 	timeout := f.Timeout
 	if timeout == 0 {

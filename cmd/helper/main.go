@@ -13,7 +13,7 @@ import (
 
 func main() {
 	showVersion := flag.Bool("version", false, "print version and exit")
-	op := flag.String("op", "", "operation: access|list|read|write|mkdir|delete|rename|copy|stat")
+	op := flag.String("op", "", "operation: access|list|read|write|mkdir|delete|rename|copy|stat|search")
 	uid := flag.Int("uid", -1, "target user uid")
 	gid := flag.Int("gid", -1, "target user gid")
 	path := flag.String("path", "", "target path")
@@ -21,6 +21,8 @@ func main() {
 	bases := flag.String("bases", "", "comma-separated allowed base paths")
 	offset := flag.Int64("offset", 0, "byte offset for read operation")
 	length := flag.Int64("length", 0, "byte length for read operation (0 = read to end)")
+	query := flag.String("query", "", "search query string (for search operation)")
+	maxResults := flag.Int("max-results", 200, "maximum number of search results")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: fileshelf-helper -op <op> -uid <uid> -gid <gid> -path <path> -bases <bases> [-dest <dest>]\n\n")
@@ -62,14 +64,16 @@ func main() {
 	baseList := strings.Split(*bases, ",")
 
 	p := helper.Params{
-		Op:     *op,
-		UID:    *uid,
-		GID:    *gid,
-		Path:   *path,
-		Dest:   *dest,
-		Bases:  baseList,
-		Offset: *offset,
-		Length: *length,
+		Op:         *op,
+		UID:        *uid,
+		GID:        *gid,
+		Path:       *path,
+		Dest:       *dest,
+		Bases:      baseList,
+		Offset:     *offset,
+		Length:     *length,
+		Query:      *query,
+		MaxResults: *maxResults,
 	}
 
 	// Drop privileges before any file operation.

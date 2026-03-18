@@ -47,6 +47,7 @@ func NewRouter(cfg *config.Config, fop fileop.FileOperator) http.Handler {
 	apiMux.HandleFunc("GET /api/files/download-zip", h.HandleFilesDownloadZip)
 	apiMux.HandleFunc("GET /api/files/zip-pages", h.HandleZipPages)
 	apiMux.HandleFunc("GET /api/files/zip-page", h.HandleZipPage)
+	apiMux.HandleFunc("GET /api/files/search", h.HandleFilesSearch)
 
 	// Wrap API with auth middleware
 	mux.Handle("/api/", authMiddleware(apiMux))

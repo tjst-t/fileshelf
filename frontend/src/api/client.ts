@@ -112,6 +112,22 @@ export function zipPageUrl(path: string, page: number): string {
   return `/api/files/zip-page?path=${encodeURIComponent(path)}&page=${page}`;
 }
 
+export interface SearchResultEntry {
+  name: string;
+  type: "file" | "dir";
+  size: number;
+  modified: string;
+  perms: string;
+  dir: string; // virtual directory path, e.g. "/media/movies/action"
+}
+
+export async function searchFiles(
+  query: string
+): Promise<{ results: SearchResultEntry[]; query: string }> {
+  const res = await fetch(`/api/files/search?q=${encodeURIComponent(query)}`);
+  return handleResponse<{ results: SearchResultEntry[]; query: string }>(res);
+}
+
 export async function copyFile(
   path: string,
   dest: string
