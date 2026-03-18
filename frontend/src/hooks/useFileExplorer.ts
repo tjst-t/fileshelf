@@ -16,6 +16,7 @@ export interface UploadProgress {
   loaded: number;
   status: "uploading" | "done" | "error";
   error?: string;
+  abort?: () => void;
 }
 
 export interface ClipboardState {
@@ -261,27 +262,40 @@ export function useFileExplorer() {
     (files: FileList) => {
       for (const file of Array.from(files)) {
         const key = `${file.name}-${Date.now()}-${Math.random()}`;
-        setUploads((prev) => {
-          const next = new Map(prev);
-          next.set(key, { name: file.name, size: file.size, loaded: 0, status: "uploading" });
-          return next;
-        });
 
-        const { promise } = uploadFileWithProgress(
+        // Throttle progress updates with rAF to avoid excessive re-renders
+        let rafId = 0;
+        let lastLoaded = 0;
+        let lastTotal = 0;
+        const flushProgress = () => {
+          rafId = 0;
+          setUploads((prev) => {
+            const next = new Map(prev);
+            const entry = next.get(key);
+            if (entry) next.set(key, { ...entry, loaded: lastLoaded, size: lastTotal });
+            return next;
+          });
+        };
+
+        const { promise, abort } = uploadFileWithProgress(
           currentPath + "/" + file.name,
           file,
           (loaded, total) => {
-            setUploads((prev) => {
-              const next = new Map(prev);
-              const entry = next.get(key);
-              if (entry) next.set(key, { ...entry, loaded, size: total });
-              return next;
-            });
+            lastLoaded = loaded;
+            lastTotal = total;
+            if (!rafId) rafId = requestAnimationFrame(flushProgress);
           }
         );
 
+        setUploads((prev) => {
+          const next = new Map(prev);
+          next.set(key, { name: file.name, size: file.size, loaded: 0, status: "uploading", abort });
+          return next;
+        });
+
         promise
           .then(() => {
+            if (rafId) cancelAnimationFrame(rafId);
             setUploads((prev) => {
               const next = new Map(prev);
               const entry = next.get(key);
@@ -298,6 +312,7 @@ export function useFileExplorer() {
             }, 1000);
           })
           .catch((e) => {
+            if (rafId) cancelAnimationFrame(rafId);
             setUploads((prev) => {
               const next = new Map(prev);
               const entry = next.get(key);
