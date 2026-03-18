@@ -570,6 +570,18 @@ export default function FileListPane({
                         </div>
                       )}
                     </div>
+                    {u.status === "uploading" && u.abort && (
+                      <button
+                        className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-md text-text-dim hover:bg-surface-raised hover:text-danger cursor-pointer transition-colors"
+                        onClick={() => u.abort!()}
+                        title="Cancel upload"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <line x1="18" y1="6" x2="6" y2="18" />
+                          <line x1="6" y1="6" x2="18" y2="18" />
+                        </svg>
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -783,7 +795,20 @@ export default function FileListPane({
                       <td className="px-3 py-1.5 text-text-dim font-mono text-xs">
                         {u.status === "uploading" ? "Uploading..." : u.status === "done" ? "Done" : "Error"}
                       </td>
-                      <td className="px-3 py-1.5"></td>
+                      <td className="px-3 py-1.5">
+                        {u.status === "uploading" && u.abort && (
+                          <button
+                            className="w-6 h-6 flex items-center justify-center rounded text-text-dim hover:text-danger cursor-pointer transition-colors"
+                            onClick={() => u.abort!()}
+                            title="Cancel upload"
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <line x1="18" y1="6" x2="6" y2="18" />
+                              <line x1="6" y1="6" x2="18" y2="18" />
+                            </svg>
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   );
                 })}
