@@ -319,7 +319,8 @@ func (h *Handlers) HandleFilesMkdir(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		Path string `json:"path"`
+		Path      string `json:"path"`
+		Recursive bool   `json:"recursive"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSONError(w, "invalid request body", http.StatusBadRequest)
@@ -332,7 +333,13 @@ func (h *Handlers) HandleFilesMkdir(w http.ResponseWriter, r *http.Request) {
 
 	absPath := h.resolvePath(body.Path)
 
-	if err := h.FileOp.Mkdir(r.Context(), *user, absPath); err != nil {
+	var err error
+	if body.Recursive {
+		err = h.FileOp.MkdirAll(r.Context(), *user, absPath)
+	} else {
+		err = h.FileOp.Mkdir(r.Context(), *user, absPath)
+	}
+	if err != nil {
 		writeHelperError(w, err)
 		return
 	}

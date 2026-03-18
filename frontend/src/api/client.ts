@@ -65,11 +65,11 @@ export async function uploadFile(path: string, file: File): Promise<void> {
   await handleResponse(res);
 }
 
-export async function createDir(path: string): Promise<void> {
+export async function createDir(path: string, recursive?: boolean): Promise<void> {
   const res = await fetch("/api/files/mkdir", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ path }),
+    body: JSON.stringify({ path, ...(recursive ? { recursive: true } : {}) }),
   });
   await handleResponse(res);
 }

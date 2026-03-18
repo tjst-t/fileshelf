@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import type { UploadItem } from "../hooks/useFileExplorer";
 import Breadcrumb from "./Breadcrumb";
 
 interface ToolbarProps {
@@ -7,7 +8,7 @@ interface ToolbarProps {
   onGoUp: () => void;
   onRefresh: () => void;
   onNewFolder: (name: string) => void;
-  onUpload: (files: FileList) => void;
+  onUpload: (items: UploadItem[]) => void;
   showPreview: boolean;
   onTogglePreview: () => void;
   isMobile?: boolean;
@@ -25,6 +26,7 @@ export default function Toolbar({
   isMobile,
 }: ToolbarProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [folderName, setFolderName] = useState("");
 
@@ -104,7 +106,7 @@ export default function Toolbar({
           <button
             className="border border-accent/30 bg-accent/15 rounded px-2.5 py-1 md:py-0.5 text-xs text-accent cursor-pointer hover:bg-accent/25 transition-colors min-h-[36px] md:min-h-0"
             onClick={() => fileInputRef.current?.click()}
-            title="Upload"
+            title="Upload files"
           >
             {isMobile ? "⬆" : "⬆ Upload"}
           </button>
@@ -115,7 +117,34 @@ export default function Toolbar({
             className="hidden"
             onChange={(e) => {
               if (e.target.files && e.target.files.length > 0) {
-                onUpload(e.target.files);
+                const items: UploadItem[] = Array.from(e.target.files).map(f => ({
+                  file: f,
+                  relativePath: f.name,
+                }));
+                onUpload(items);
+                e.target.value = "";
+              }
+            }}
+          />
+          <button
+            className="border border-accent/30 bg-accent/15 rounded px-2.5 py-1 md:py-0.5 text-xs text-accent cursor-pointer hover:bg-accent/25 transition-colors min-h-[36px] md:min-h-0"
+            onClick={() => folderInputRef.current?.click()}
+            title="Upload folder"
+          >
+            {isMobile ? "📁⬆" : "📁 Folder"}
+          </button>
+          <input
+            ref={folderInputRef}
+            type="file"
+            className="hidden"
+            {...{ webkitdirectory: "", directory: "" } as React.InputHTMLAttributes<HTMLInputElement>}
+            onChange={(e) => {
+              if (e.target.files && e.target.files.length > 0) {
+                const items: UploadItem[] = Array.from(e.target.files).map(f => ({
+                  file: f,
+                  relativePath: f.webkitRelativePath || f.name,
+                }));
+                onUpload(items);
                 e.target.value = "";
               }
             }}

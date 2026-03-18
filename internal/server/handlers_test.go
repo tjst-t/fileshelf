@@ -49,6 +49,9 @@ func (m *mockFileOperator) Write(_ context.Context, _ fileop.User, _ string, _ i
 func (m *mockFileOperator) Mkdir(_ context.Context, _ fileop.User, _ string) error {
 	return m.mkdirErr
 }
+func (m *mockFileOperator) MkdirAll(_ context.Context, _ fileop.User, _ string) error {
+	return m.mkdirErr
+}
 func (m *mockFileOperator) Delete(_ context.Context, _ fileop.User, _ string) error {
 	return m.deleteErr
 }

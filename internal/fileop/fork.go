@@ -82,6 +82,11 @@ func (f *ForkFileOperator) Mkdir(ctx context.Context, user User, path string) er
 	return err
 }
 
+func (f *ForkFileOperator) MkdirAll(ctx context.Context, user User, path string) error {
+	_, err := f.run(ctx, user, "mkdirp", path, "", nil)
+	return err
+}
+
 func (f *ForkFileOperator) Delete(ctx context.Context, user User, path string) error {
 	_, err := f.run(ctx, user, "delete", path, "", nil)
 	return err

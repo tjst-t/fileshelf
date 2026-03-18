@@ -12,7 +12,7 @@ export default function Breadcrumb({ currentPath, onNavigate }: BreadcrumbProps)
         className="text-accent px-1 py-0.5 rounded cursor-pointer hover:bg-accent/12"
         onClick={() => onNavigate("")}
       >
-        /
+        shares
       </button>
       {parts.map((part, i) => {
         const path = "/" + parts.slice(0, i + 1).join("/");

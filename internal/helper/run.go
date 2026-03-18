@@ -18,6 +18,7 @@ var AllowedOps = map[string]bool{
 	"read":   true,
 	"write":  true,
 	"mkdir":  true,
+	"mkdirp": true,
 	"delete": true,
 	"rename": true,
 	"copy":   true,
@@ -108,6 +109,13 @@ func execute(p Params, stdin io.Reader, stdout, stderr io.Writer) int {
 
 	case "mkdir":
 		if err := OpMkdir(p.Path); err != nil {
+			return writeOpError(stderr, err)
+		}
+		writeJSON(stdout, okResult)
+		return ExitOK
+
+	case "mkdirp":
+		if err := OpMkdirAll(p.Path); err != nil {
 			return writeOpError(stderr, err)
 		}
 		writeJSON(stdout, okResult)

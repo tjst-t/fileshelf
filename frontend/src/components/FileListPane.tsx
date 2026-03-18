@@ -1,9 +1,10 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
-import type { FileEntry } from "../api/client";
-import type { ClipboardState, UploadProgress } from "../hooks/useFileExplorer";
+import type { FileEntry, Share } from "../api/client";
+import type { ClipboardState, UploadProgress, UploadItem } from "../hooks/useFileExplorer";
 import { downloadUrl } from "../api/client";
 import { formatSize } from "../utils/format";
 import { isPreviewable } from "../utils/fileTypes";
+import { captureDrop, processDropItems } from "../utils/dropItems";
 import ContextMenu from "./ContextMenu";
 import type { ContextMenuItem } from "./ContextMenu";
 
@@ -20,7 +21,7 @@ interface FileListPaneProps {
   onPreview: (entry: FileEntry) => void;
   onRichPreview: (entry: FileEntry) => void;
   onRename: (oldName: string, newName: string) => void;
-  onDrop: (files: FileList) => void;
+  onDrop: (items: UploadItem[]) => void;
   onCopy: () => void;
   onCut: () => void;
   onPaste: () => void;
@@ -28,6 +29,7 @@ interface FileListPaneProps {
   onShowDropMenu: (paths: string[], destDir: string, x: number, y: number, sameDir: boolean) => void;
   isMobile?: boolean;
   uploads?: Map<string, UploadProgress>;
+  shares?: Share[];
 }
 
 type SortKey = "name" | "size" | "modified" | "perms";
@@ -88,6 +90,7 @@ export default function FileListPane({
   onShowDropMenu,
   isMobile,
   uploads,
+  shares,
 }: FileListPaneProps) {
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
@@ -439,9 +442,42 @@ export default function FileListPane({
 
   if (!currentPath) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-text-dark gap-2">
-        <span className="text-4xl">📚</span>
-        <span className="text-sm">Select a share from the tree</span>
+      <div className="h-full flex flex-col overflow-hidden">
+        <div className="flex-1 overflow-auto">
+          <table className="w-full border-collapse table-fixed select-none">
+            <thead className="sticky top-0 bg-surface-alt z-[2]">
+              <tr>
+                <th className="px-3 py-2 text-[11px] uppercase tracking-[0.05em] font-semibold select-none whitespace-nowrap border-b border-border text-left w-[45%] text-text-dim">Name</th>
+                <th className="px-3 py-2 text-[11px] uppercase tracking-[0.05em] font-semibold select-none whitespace-nowrap border-b border-border text-right w-[15%] text-text-dim">Size</th>
+                <th className="px-3 py-2 text-[11px] uppercase tracking-[0.05em] font-semibold select-none whitespace-nowrap border-b border-border text-left w-[22%] text-text-dim">Modified</th>
+                <th className="px-3 py-2 text-[11px] uppercase tracking-[0.05em] font-semibold select-none whitespace-nowrap border-b border-border text-left w-[18%] text-text-dim">Perms</th>
+              </tr>
+            </thead>
+            <tbody>
+              {shares && shares.length > 0 ? shares.map((share) => (
+                <tr
+                  key={share.name}
+                  className="cursor-pointer transition-colors duration-100 border-b border-border/50 hover:bg-hover-row"
+                  onClick={() => onNavigate(share.name)}
+                >
+                  <td className="px-3 py-1.5 text-[13px]">
+                    <div className="flex items-center gap-2 overflow-hidden">
+                      <span className="flex-shrink-0 text-[15px]">{"\u{1F4C1}"}</span>
+                      <span className="truncate text-accent">{share.name}</span>
+                    </div>
+                  </td>
+                  <td className="px-3 py-1.5 text-right text-text-dim font-mono text-xs">&mdash;</td>
+                  <td className="px-3 py-1.5 text-text-dim font-mono text-xs"></td>
+                  <td className="px-3 py-1.5 text-text-faint font-mono text-xs"></td>
+                </tr>
+              )) : (
+                <tr>
+                  <td colSpan={4} className="py-10 text-center text-text-dark text-sm">No shares available</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     );
   }
@@ -463,14 +499,17 @@ export default function FileListPane({
           e.preventDefault();
           e.stopPropagation();
           setDragOver(false);
-          if (e.dataTransfer.files.length > 0) {
-            onDrop(e.dataTransfer.files);
+          const captured = captureDrop(e.dataTransfer);
+          if (captured.entries.length > 0 || captured.files.length > 0) {
+            processDropItems(captured).then(items => {
+              if (items.length > 0) onDrop(items);
+            });
           }
         }}
       >
         {dragOver && (
           <div className="absolute inset-2 bg-accent/8 border-2 border-dashed border-accent rounded-lg z-10 flex items-center justify-center text-base text-accent font-medium pointer-events-none">
-            Drop files to upload
+            Drop files or folders to upload
           </div>
         )}
 
@@ -634,15 +673,18 @@ export default function FileListPane({
         e.preventDefault();
         e.stopPropagation();
         setDragOver(false);
-        if (e.dataTransfer.files.length > 0) {
-          onDrop(e.dataTransfer.files);
+        const captured = captureDrop(e.dataTransfer);
+        if (captured.entries.length > 0 || captured.files.length > 0) {
+          processDropItems(captured).then(items => {
+            if (items.length > 0) onDrop(items);
+          });
         }
       }}
     >
       {/* Upload drag overlay */}
       {dragOver && (
         <div className="absolute inset-2 bg-accent/8 border-2 border-dashed border-accent rounded-lg z-10 flex items-center justify-center text-base text-accent font-medium pointer-events-none">
-          Drop files to upload
+          Drop files or folders to upload
         </div>
       )}
 

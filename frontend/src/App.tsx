@@ -4,6 +4,7 @@ import { fetchVersion } from "./api/client";
 import { useFileExplorer } from "./hooks/useFileExplorer";
 import { useTheme } from "./hooks/useTheme";
 import { useIsMobile, useIsTablet } from "./hooks/useMediaQuery";
+import { captureDrop, processDropItems } from "./utils/dropItems";
 import TitleBar from "./components/TitleBar";
 import TreePane from "./components/TreePane";
 import Toolbar from "./components/Toolbar";
@@ -173,8 +174,11 @@ export default function App() {
       e.preventDefault();
       setGlobalDragOver(false);
       if (!currentPath) return;
-      if (e.dataTransfer.files.length > 0) {
-        handleUpload(e.dataTransfer.files);
+      const captured = captureDrop(e.dataTransfer);
+      if (captured.entries.length > 0 || captured.files.length > 0) {
+        processDropItems(captured).then(items => {
+          if (items.length > 0) handleUpload(items);
+        });
       }
     },
     [currentPath, handleUpload]
@@ -263,7 +267,7 @@ export default function App() {
         <div className="absolute inset-0 z-50 bg-accent/10 flex items-center justify-center pointer-events-none">
           <div className="bg-surface border-2 border-dashed border-accent rounded-xl px-12 py-8 text-center shadow-xl">
             <div className="text-4xl mb-3">📂</div>
-            <div className="text-lg font-medium text-accent">Drop files to upload</div>
+            <div className="text-lg font-medium text-accent">Drop files or folders to upload</div>
             <div className="text-sm text-text-muted mt-1">
               to {currentPath}
             </div>
@@ -361,6 +365,7 @@ export default function App() {
               onShowDropMenu={handleShowDropMenu}
               isMobile={isMobile}
               uploads={uploads}
+              shares={shares}
             />
           )}
         </div>

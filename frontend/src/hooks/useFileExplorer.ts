@@ -19,6 +19,11 @@ export interface UploadProgress {
   abort?: () => void;
 }
 
+export interface UploadItem {
+  file: File;
+  relativePath: string;
+}
+
 export interface ClipboardState {
   entries: { name: string; path: string }[];
   mode: "copy" | "cut";
@@ -259,9 +264,30 @@ export function useFileExplorer() {
   );
 
   const handleUpload = useCallback(
-    (files: FileList) => {
-      for (const file of Array.from(files)) {
-        const key = `${file.name}-${Date.now()}-${Math.random()}`;
+    async (items: UploadItem[]) => {
+      // Collect unique directory paths that need to be created
+      const dirs = new Set<string>();
+      for (const item of items) {
+        const dir = item.relativePath.substring(0, item.relativePath.lastIndexOf("/"));
+        if (dir) {
+          dirs.add(dir);
+        }
+      }
+
+      // Create directories (sorted by depth so parents are created first)
+      if (dirs.size > 0) {
+        const sortedDirs = Array.from(dirs).sort((a, b) => a.split("/").length - b.split("/").length);
+        for (const dir of sortedDirs) {
+          try {
+            await createDir(currentPath + "/" + dir, true);
+          } catch {
+            // Directory may already exist, ignore
+          }
+        }
+      }
+
+      for (const item of items) {
+        const key = `${item.relativePath}-${Date.now()}-${Math.random()}`;
 
         // Throttle progress updates with rAF to avoid excessive re-renders
         let rafId = 0;
@@ -278,8 +304,8 @@ export function useFileExplorer() {
         };
 
         const { promise, abort } = uploadFileWithProgress(
-          currentPath + "/" + file.name,
-          file,
+          currentPath + "/" + item.relativePath,
+          item.file,
           (loaded, total) => {
             lastLoaded = loaded;
             lastTotal = total;
@@ -289,7 +315,7 @@ export function useFileExplorer() {
 
         setUploads((prev) => {
           const next = new Map(prev);
-          next.set(key, { name: file.name, size: file.size, loaded: 0, status: "uploading", abort });
+          next.set(key, { name: item.relativePath, size: item.file.size, loaded: 0, status: "uploading", abort });
           return next;
         });
 

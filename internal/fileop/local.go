@@ -106,6 +106,10 @@ func (l *LocalFileOperator) Mkdir(_ context.Context, _ User, path string) error 
 	return os.Mkdir(path, 0755)
 }
 
+func (l *LocalFileOperator) MkdirAll(_ context.Context, _ User, path string) error {
+	return os.MkdirAll(path, 0755)
+}
+
 func (l *LocalFileOperator) Delete(_ context.Context, _ User, path string) error {
 	return os.RemoveAll(path)
 }
