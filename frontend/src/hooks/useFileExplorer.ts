@@ -63,6 +63,12 @@ export function useFileExplorer() {
   const [searchLoading, setSearchLoading] = useState(false);
   const searchQueryRef = useRef("");
   const searchActiveRef = useRef(false);
+  const currentPathRef = useRef("");
+
+  // Keep currentPathRef in sync
+  useEffect(() => {
+    currentPathRef.current = currentPath;
+  }, [currentPath]);
 
   const showToast = useCallback((message: string, type: "success" | "error" = "success") => {
     setToast({ message, type });
@@ -88,7 +94,7 @@ export function useFileExplorer() {
     }
     setSearchLoading(true);
     try {
-      const data = await searchFiles(query);
+      const data = await searchFiles(query, currentPathRef.current || undefined);
       setSearchResults(data.results);
       searchActiveRef.current = true;
       setSelected(new Set());

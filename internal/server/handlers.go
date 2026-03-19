@@ -802,27 +802,12 @@ func (h *Handlers) HandleFilesSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	maxResults := 200
+	scopePath := r.URL.Query().Get("path") // optional: scope search to this virtual path
 
 	type shareResult struct {
 		shareName string
 		results   []fileop.SearchEntry
 		err       error
-	}
-
-	// Search accessible shares concurrently
-	var accessibleShares []config.Share
-	for _, s := range h.Config.Shares {
-		if err := h.FileOp.Access(r.Context(), *user, s.Path); err == nil {
-			accessibleShares = append(accessibleShares, s)
-		}
-	}
-
-	ch := make(chan shareResult, len(accessibleShares))
-	for _, s := range accessibleShares {
-		go func(s config.Share) {
-			results, err := h.FileOp.Search(r.Context(), *user, s.Path, query, maxResults)
-			ch <- shareResult{shareName: s.Name, results: results, err: err}
-		}(s)
 	}
 
 	type resultEntry struct {
@@ -835,13 +820,19 @@ func (h *Handlers) HandleFilesSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var allResults []resultEntry
-	for range accessibleShares {
-		sr := <-ch
-		if sr.err != nil {
-			continue
+
+	if scopePath != "" {
+		// Scoped search: search within a specific directory
+		absPath := h.resolvePath(scopePath)
+		virtualDir := filepath.Clean("/" + scopePath)
+
+		results, err := h.FileOp.Search(r.Context(), *user, absPath, query, maxResults)
+		if err != nil {
+			writeHelperError(w, err)
+			return
 		}
-		for _, entry := range sr.results {
-			dir := "/" + sr.shareName
+		for _, entry := range results {
+			dir := virtualDir
 			if entry.Dir != "" {
 				dir += "/" + entry.Dir
 			}
@@ -853,12 +844,49 @@ func (h *Handlers) HandleFilesSearch(w http.ResponseWriter, r *http.Request) {
 				Perms:    entry.Perms,
 				Dir:      dir,
 			})
+		}
+	} else {
+		// Global search: search all accessible shares concurrently
+		var accessibleShares []config.Share
+		for _, s := range h.Config.Shares {
+			if err := h.FileOp.Access(r.Context(), *user, s.Path); err == nil {
+				accessibleShares = append(accessibleShares, s)
+			}
+		}
+
+		ch := make(chan shareResult, len(accessibleShares))
+		for _, s := range accessibleShares {
+			go func(s config.Share) {
+				results, err := h.FileOp.Search(r.Context(), *user, s.Path, query, maxResults)
+				ch <- shareResult{shareName: s.Name, results: results, err: err}
+			}(s)
+		}
+
+		for range accessibleShares {
+			sr := <-ch
+			if sr.err != nil {
+				continue
+			}
+			for _, entry := range sr.results {
+				dir := "/" + sr.shareName
+				if entry.Dir != "" {
+					dir += "/" + entry.Dir
+				}
+				allResults = append(allResults, resultEntry{
+					Name:     entry.Name,
+					Type:     entry.Type,
+					Size:     entry.Size,
+					Modified: entry.Modified,
+					Perms:    entry.Perms,
+					Dir:      dir,
+				})
+				if len(allResults) >= maxResults {
+					break
+				}
+			}
 			if len(allResults) >= maxResults {
 				break
 			}
-		}
-		if len(allResults) >= maxResults {
-			break
 		}
 	}
 

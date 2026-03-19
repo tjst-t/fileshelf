@@ -122,9 +122,14 @@ export interface SearchResultEntry {
 }
 
 export async function searchFiles(
-  query: string
+  query: string,
+  path?: string
 ): Promise<{ results: SearchResultEntry[]; query: string }> {
-  const res = await fetch(`/api/files/search?q=${encodeURIComponent(query)}`);
+  let url = `/api/files/search?q=${encodeURIComponent(query)}`;
+  if (path) {
+    url += `&path=${encodeURIComponent(path)}`;
+  }
+  const res = await fetch(url);
   return handleResponse<{ results: SearchResultEntry[]; query: string }>(res);
 }
 
