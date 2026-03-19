@@ -559,7 +559,17 @@ export default function FileListPane({
     };
 
     return (
-      <div className="h-full flex flex-col overflow-hidden">
+      <div className="h-full flex flex-col overflow-hidden relative">
+        {/* Loading overlay */}
+        {searchLoading && (
+          <div className="absolute inset-0 z-10 flex flex-col">
+            {/* Animated progress bar */}
+            <div className="h-0.5 w-full bg-border overflow-hidden flex-shrink-0">
+              <div className="h-full bg-accent animate-[searchProgress_1.2s_ease-in-out_infinite] origin-left" />
+            </div>
+            <div className="flex-1 bg-surface/60 pointer-events-none" />
+          </div>
+        )}
         <div className="flex-1 overflow-auto">
           <table className="w-full border-collapse table-fixed select-none">
             <thead className="sticky top-0 bg-surface-alt z-[2]">
@@ -571,11 +581,11 @@ export default function FileListPane({
               </tr>
             </thead>
             <tbody>
-              {searchLoading ? (
+              {searchResults.length === 0 && searchLoading ? (
                 <tr>
                   <td colSpan={4} className="py-8 text-center text-text-muted text-sm">Searching...</td>
                 </tr>
-              ) : searchResults.length === 0 ? (
+              ) : searchResults.length === 0 && !searchLoading ? (
                 <tr>
                   <td colSpan={4} className="py-10 text-center text-text-dark text-sm">No results found</td>
                 </tr>

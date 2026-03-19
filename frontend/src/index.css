@@ -80,6 +80,13 @@
    *   - Accent: deep sky blue — professional, high contrast on white (≈6:1)
    *   - Semantic colors tuned for readability on white backgrounds
    */
+  @keyframes searchProgress {
+    0% { transform: scaleX(0); transform-origin: left; }
+    40% { transform: scaleX(1); transform-origin: left; }
+    40.01% { transform-origin: right; }
+    80%, 100% { transform: scaleX(0); transform-origin: right; }
+  }
+
   [data-theme="light"] {
     --color-bg: #eef0f4;
     --color-surface: #ffffff;
