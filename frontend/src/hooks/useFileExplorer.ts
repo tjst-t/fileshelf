@@ -75,7 +75,10 @@ export function useFileExplorer() {
 
   const showToast = useCallback((message: string, type: "success" | "error" = "success") => {
     setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
+  }, []);
+
+  const dismissToast = useCallback(() => {
+    setToast(null);
   }, []);
 
   const loadShares = useCallback(async () => {
@@ -518,6 +521,7 @@ export function useFileExplorer() {
     error,
     clipboard,
     toast,
+    dismissToast,
     navigate,
     goUp,
     refresh,
