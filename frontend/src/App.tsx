@@ -32,7 +32,6 @@ export default function App() {
     error,
     clipboard,
     toast,
-    dismissToast,
     navigate,
     goUp,
     refresh,
@@ -432,7 +431,7 @@ export default function App() {
       <StatusBar entries={entries} selected={selected} version={version} isMobile={isMobile} />
 
       {/* Toast */}
-      {toast && <Toast message={toast.message} type={toast.type} onDismiss={dismissToast} />}
+      {toast && <Toast message={toast.message} type={toast.type} />}
 
       {/* Delete dialog */}
       {showDeleteDialog && (
