@@ -9,6 +9,7 @@ interface TreePaneProps {
   shares: Share[];
   currentPath: string;
   clipboard: ClipboardState | null;
+  refreshKey: number;
   onNavigate: (path: string) => void;
   onCopy: () => void;
   onCut: () => void;
@@ -126,6 +127,7 @@ export default function TreePane({
   shares,
   currentPath,
   clipboard,
+  refreshKey,
   onNavigate,
   onCopy,
   onCut,
@@ -228,6 +230,87 @@ export default function TreePane({
     expandPath();
     return () => { cancelled = true; };
   }, [currentPath, nodes.length]); // only re-run when path changes or shares load
+
+  // Re-fetch children for all expanded nodes when refreshKey changes
+  useEffect(() => {
+    if (refreshKey === 0) return;
+
+    // Collect all expanded nodes that have been fetched
+    const collectExpanded = (nodes: TreeNode[]): string[] => {
+      const result: string[] = [];
+      for (const n of nodes) {
+        if (n.expanded && n.children !== null) {
+          result.push(n.path);
+          result.push(...collectExpanded(n.children));
+        }
+      }
+      return result;
+    };
+
+    let cancelled = false;
+
+    const refreshTree = async () => {
+      // Read current nodes via setState to get latest state
+      let expandedPaths: string[] = [];
+      setNodes((prev) => {
+        expandedPaths = collectExpanded(prev);
+        return prev;
+      });
+
+      for (const path of expandedPaths) {
+        if (cancelled) return;
+        try {
+          const entries: FileEntry[] = await fetchFiles(path);
+          if (cancelled) return;
+          const children: TreeNode[] = entries
+            .filter((e) => e.type === "dir")
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map((e) => ({
+              name: e.name,
+              path: path + "/" + e.name,
+              children: null,
+              expanded: false,
+              loading: false,
+            }));
+          setNodes((prev) => {
+            const update = (nodes: TreeNode[]): TreeNode[] =>
+              nodes.map((n) => {
+                if (n.path === path) {
+                  // Preserve expanded state of existing children
+                  const oldChildMap = new Map(
+                    (n.children || []).map((c) => [c.path, c])
+                  );
+                  const merged = children.map((newChild) => {
+                    const old = oldChildMap.get(newChild.path);
+                    return old ? { ...newChild, children: old.children, expanded: old.expanded } : newChild;
+                  });
+                  return { ...n, children: merged };
+                }
+                if (n.children) return { ...n, children: update(n.children) };
+                return n;
+              });
+            return update(prev);
+          });
+        } catch {
+          // If a folder no longer exists, collapse it
+          if (!cancelled) {
+            setNodes((prev) => {
+              const remove = (nodes: TreeNode[]): TreeNode[] =>
+                nodes.map((n) => {
+                  if (n.path === path) return { ...n, children: [], expanded: false };
+                  if (n.children) return { ...n, children: remove(n.children) };
+                  return n;
+                });
+              return remove(prev);
+            });
+          }
+        }
+      }
+    };
+
+    refreshTree();
+    return () => { cancelled = true; };
+  }, [refreshKey]);
 
   // Helper: find a node by path in the tree
   const findNodeIn = (nodes: TreeNode[], path: string): TreeNode | null => {

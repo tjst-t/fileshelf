@@ -51,6 +51,7 @@ export default function App() {
     handleCopyTo,
     clearClipboard,
     uploads,
+    refreshKey,
     searchQuery,
     searchResults,
     searchLoading,
@@ -257,6 +258,7 @@ export default function App() {
       shares={shares}
       currentPath={currentPath}
       clipboard={clipboard}
+      refreshKey={refreshKey}
       onNavigate={handleNavigate}
       onCopy={handleCopy}
       onCut={handleCut}

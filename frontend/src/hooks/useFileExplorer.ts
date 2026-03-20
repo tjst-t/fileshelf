@@ -168,11 +168,14 @@ export function useFileExplorer() {
     navigate("/" + parts.join("/"));
   }, [currentPath, navigate]);
 
+  const [refreshKey, setRefreshKey] = useState(0);
+
   const refresh = useCallback(async () => {
     if (!currentPath) return;
     setLoading(true);
     setError(null);
     setSelected(new Set());
+    setRefreshKey((k) => k + 1);
     try {
       const data = await fetchFiles(currentPath);
       setEntries(data);
@@ -217,9 +220,9 @@ export function useFileExplorer() {
   }, [entries]);
 
   const selectRange = useCallback(
-    (name: string) => {
+    (name: string, sortedNames?: string[]) => {
       setSelected((prev) => {
-        const names = entries.map((e) => e.name);
+        const names = sortedNames ?? entries.map((e) => e.name);
         if (prev.size === 0) return new Set([name]);
         const last = Array.from(prev).pop()!;
         const from = names.indexOf(last);
@@ -524,6 +527,7 @@ export function useFileExplorer() {
     uploads,
     searchQuery,
     searchResults,
+    refreshKey,
     searchLoading,
     handleSearch,
     clearSearch,

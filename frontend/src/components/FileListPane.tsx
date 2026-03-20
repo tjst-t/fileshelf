@@ -16,7 +16,7 @@ interface FileListPaneProps {
   clipboard: ClipboardState | null;
   onNavigate: (path: string) => void;
   onSelect: (name: string, multi: boolean) => void;
-  onSelectRange: (name: string) => void;
+  onSelectRange: (name: string, sortedNames?: string[]) => void;
   onSetSelected: (names: Set<string>) => void;
   onPreview: (entry: FileEntry, pathOverride?: string) => void;
   onRichPreview: (entry: FileEntry, pathOverride?: string) => void;
@@ -34,8 +34,14 @@ interface FileListPaneProps {
   searchLoading?: boolean;
 }
 
-type SortKey = "name" | "size" | "modified" | "perms";
+type SortKey = "name" | "ext" | "size" | "modified" | "perms";
 type SortDir = "asc" | "desc";
+
+function getExt(name: string): string {
+  const dot = name.lastIndexOf(".");
+  if (dot <= 0) return "";
+  return name.slice(dot + 1).toLowerCase();
+}
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
@@ -141,6 +147,12 @@ export default function FileListPane({
       case "name":
         cmp = a.name.localeCompare(b.name);
         break;
+      case "ext": {
+        const extA = getExt(a.name);
+        const extB = getExt(b.name);
+        cmp = extA.localeCompare(extB) || a.name.localeCompare(b.name);
+        break;
+      }
       case "size":
         cmp = a.size - b.size;
         break;
@@ -583,11 +595,11 @@ export default function FileListPane({
             <tbody>
               {searchResults.length === 0 && searchLoading ? (
                 <tr>
-                  <td colSpan={4} className="py-8 text-center text-text-muted text-sm">Searching...</td>
+                  <td colSpan={5} className="py-8 text-center text-text-muted text-sm">Searching...</td>
                 </tr>
               ) : searchResults.length === 0 && !searchLoading ? (
                 <tr>
-                  <td colSpan={4} className="py-10 text-center text-text-dark text-sm">No results found</td>
+                  <td colSpan={5} className="py-10 text-center text-text-dark text-sm">No results found</td>
                 </tr>
               ) : (
                 searchResults.map((result, i) => {
@@ -703,7 +715,7 @@ export default function FileListPane({
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={4} className="py-10 text-center text-text-dark text-sm">No shares available</td>
+                  <td colSpan={5} className="py-10 text-center text-text-dark text-sm">No shares available</td>
                 </tr>
               )}
             </tbody>
@@ -943,10 +955,11 @@ export default function FileListPane({
           <thead className="sticky top-0 bg-surface-alt z-[2]">
             <tr>
               {([
-                { key: "name" as SortKey, label: "Name", align: "text-left", width: "w-[45%]" },
-                { key: "size" as SortKey, label: "Size", align: "text-right", width: "w-[15%]" },
+                { key: "name" as SortKey, label: "Name", align: "text-left", width: "w-[38%]" },
+                { key: "ext" as SortKey, label: "Ext", align: "text-left", width: "w-[8%]" },
+                { key: "size" as SortKey, label: "Size", align: "text-right", width: "w-[13%]" },
                 { key: "modified" as SortKey, label: "Modified", align: "text-left", width: "w-[22%]" },
-                { key: "perms" as SortKey, label: "Perms", align: "text-left", width: "w-[18%]" },
+                { key: "perms" as SortKey, label: "Perms", align: "text-left", width: "w-[19%]" },
               ]).map((col) => (
                 <th
                   key={col.key}
@@ -963,11 +976,11 @@ export default function FileListPane({
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={4} className="py-8 text-center text-text-muted text-sm">Loading...</td>
+                <td colSpan={5} className="py-8 text-center text-text-muted text-sm">Loading...</td>
               </tr>
             ) : sorted.length === 0 ? (
               <tr>
-                <td colSpan={4} className="py-10 text-center text-text-dark text-sm">Empty directory</td>
+                <td colSpan={5} className="py-10 text-center text-text-dark text-sm">Empty directory</td>
               </tr>
             ) : (
               <>
@@ -994,7 +1007,7 @@ export default function FileListPane({
                     onClick={(e) => {
                       if (lassoActiveRef.current) return;
                       if (e.shiftKey) {
-                        onSelectRange(entry.name);
+                        onSelectRange(entry.name, sorted.map((e) => e.name));
                       } else {
                         onSelect(entry.name, e.ctrlKey || e.metaKey);
                       }
@@ -1028,6 +1041,9 @@ export default function FileListPane({
                         )}
                       </div>
                     </td>
+                    <td className="px-3 py-1.5 text-text-dim font-mono text-xs truncate">
+                      {entry.type === "dir" ? "" : getExt(entry.name)}
+                    </td>
                     <td className="px-3 py-1.5 text-right text-text-dim font-mono text-xs">
                       {entry.type === "dir" ? "\u2014" : formatSize(entry.size)}
                     </td>
@@ -1049,6 +1065,9 @@ export default function FileListPane({
                           <span className="flex-shrink-0 text-[15px]">{"\u{1F4C4}"}</span>
                           <span className="truncate text-text">{u.name}</span>
                         </div>
+                      </td>
+                      <td className="px-3 py-1.5 text-text-dim font-mono text-xs truncate">
+                        {getExt(u.name)}
                       </td>
                       <td className="px-3 py-1.5 text-right text-xs">
                         {u.status === "error" ? (
