@@ -106,7 +106,7 @@ function ColumnResizeHandle({ onResize }: { onResize: (delta: number) => void })
 
   return (
     <div
-      className="absolute top-0 right-[-2px] w-[5px] h-full cursor-col-resize z-[3] hover:bg-accent/30 active:bg-accent/50"
+      className="absolute top-0 right-[-2px] w-[5px] h-full cursor-col-resize z-[3] border-r border-border/40 hover:border-accent/60 hover:bg-accent/20 active:bg-accent/40"
       onMouseDown={handleMouseDown}
       onClick={(e) => e.stopPropagation()}
     />
@@ -1040,11 +1040,11 @@ export default function FileListPane({
           <thead className="sticky top-0 bg-surface-alt z-[2]">
             <tr>
               {([
-                { key: "name" as SortKey, label: "Name", align: "text-left" },
-                { key: "ext" as SortKey, label: "Ext", align: "text-left" },
-                { key: "size" as SortKey, label: "Size", align: "text-right" },
-                { key: "modified" as SortKey, label: "Modified", align: "text-left" },
-                { key: "perms" as SortKey, label: "Perms", align: "text-left" },
+                { key: "name" as SortKey, label: "Name" },
+                { key: "ext" as SortKey, label: "Ext" },
+                { key: "size" as SortKey, label: "Size" },
+                { key: "modified" as SortKey, label: "Modified" },
+                { key: "perms" as SortKey, label: "Perms" },
               ]).map((col, colIdx) => (
                 <th
                   key={col.key}
@@ -1053,7 +1053,7 @@ export default function FileListPane({
                   } hover:text-text`}
                   onClick={() => handleSort(col.key)}
                 >
-                  <div className={`relative px-3 py-2 ${col.align}`}>
+                  <div className="relative px-3 py-2 text-left">
                     {col.label}{sortIndicator(col.key)}
                     {colIdx < colWidths.length - 1 && (
                       <ColumnResizeHandle onResize={(dx) => handleColResize(colIdx, dx)} />
