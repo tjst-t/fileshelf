@@ -105,14 +105,18 @@ export default function ComicViewer({ filePath, onClose }: ComicViewerProps) {
     goToSpread(currentSpreadIndex + 1);
   }, [currentSpreadIndex, goToSpread]);
 
-  // 1-page navigation (useful in spread mode)
+  // 1-page navigation: in spread mode, shift the spread window by 1 page
   const goPagePrev = useCallback(() => {
-    setCurrentPage((p) => Math.max(0, p - 1));
-  }, []);
+    const curStart = currentSpread[0];
+    if (curStart <= 0) return;
+    setCurrentPage(curStart - 1);
+  }, [currentSpread]);
 
   const goPageNext = useCallback(() => {
-    setCurrentPage((p) => Math.min(total - 1, p + 1));
-  }, [total]);
+    const curEnd = currentSpread[currentSpread.length - 1];
+    if (curEnd >= total - 1) return;
+    setCurrentPage(curEnd + 1);
+  }, [currentSpread, total]);
 
   // Navigation by click area: left/right edges navigate, center toggles toolbar
   const handleAreaClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
