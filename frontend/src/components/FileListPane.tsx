@@ -80,24 +80,18 @@ function fileIcon(entry: FileEntry): string {
 }
 
 function ColumnResizeHandle({ onResize }: { onResize: (delta: number) => void }) {
-  const dragging = useRef(false);
-  const startX = useRef(0);
-
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    startX.current = e.clientX;
-    dragging.current = true;
+    let startX = e.clientX;
 
     const handleMouseMove = (ev: MouseEvent) => {
-      if (!dragging.current) return;
-      const delta = ev.clientX - startX.current;
-      startX.current = ev.clientX;
+      const delta = ev.clientX - startX;
+      startX = ev.clientX;
       onResize(delta);
     };
 
     const handleMouseUp = () => {
-      dragging.current = false;
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
       document.body.style.cursor = "";
@@ -112,7 +106,7 @@ function ColumnResizeHandle({ onResize }: { onResize: (delta: number) => void })
 
   return (
     <div
-      className="absolute top-0 right-0 w-[5px] h-full cursor-col-resize z-[3] hover:bg-accent/30 active:bg-accent/50"
+      className="absolute top-0 right-[-2px] w-[5px] h-full cursor-col-resize z-[3] hover:bg-accent/30 active:bg-accent/50"
       onMouseDown={handleMouseDown}
       onClick={(e) => e.stopPropagation()}
     />
@@ -1037,7 +1031,7 @@ export default function FileListPane({
         onContextMenu={handleBackgroundContextMenu}
         onMouseDown={handleLassoMouseDown}
       >
-        <table className="w-full border-collapse table-fixed select-none">
+        <table className="w-full table-fixed select-none" style={{ borderSpacing: 0 }}>
           <colgroup>
             {colWidths.map((w, i) => (
               <col key={i} style={{ width: `${w}%` }} />
@@ -1054,15 +1048,17 @@ export default function FileListPane({
               ]).map((col, colIdx) => (
                 <th
                   key={col.key}
-                  className={`relative px-3 py-2 text-[11px] uppercase tracking-[0.05em] font-semibold select-none whitespace-nowrap border-b border-border cursor-pointer ${col.align} ${
+                  className={`px-3 py-0 text-[11px] uppercase tracking-[0.05em] font-semibold select-none whitespace-nowrap border-b border-border cursor-pointer ${col.align} ${
                     sortKey === col.key ? "text-text bg-accent/6" : "text-text-dim"
                   } hover:text-text`}
                   onClick={() => handleSort(col.key)}
                 >
-                  {col.label}{sortIndicator(col.key)}
-                  {colIdx < colWidths.length - 1 && (
-                    <ColumnResizeHandle onResize={(dx) => handleColResize(colIdx, dx)} />
-                  )}
+                  <div className="relative py-2">
+                    {col.label}{sortIndicator(col.key)}
+                    {colIdx < colWidths.length - 1 && (
+                      <ColumnResizeHandle onResize={(dx) => handleColResize(colIdx, dx)} />
+                    )}
+                  </div>
                 </th>
               ))}
             </tr>
