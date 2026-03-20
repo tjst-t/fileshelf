@@ -218,26 +218,26 @@ export default function ComicViewer({ filePath, onClose }: ComicViewerProps) {
           <div className="text-white text-sm font-medium truncate">{filename}</div>
         </div>
 
-        {/* Page navigation */}
+        {/* Page navigation — in RTL, « means next (higher page) and » means prev */}
         <div className="flex items-center gap-0.5 flex-shrink-0">
-          {/* Spread prev */}
+          {/* « double-chevron left */}
           <button
-            onClick={goPrev}
-            disabled={currentSpreadIndex === 0}
+            onClick={rtl ? goNext : goPrev}
+            disabled={rtl ? currentSpreadIndex >= spreads.length - 1 : currentSpreadIndex === 0}
             className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/15 text-white/70 hover:text-white cursor-pointer transition-colors disabled:opacity-30 disabled:cursor-default"
-            title="Previous spread"
+            title={rtl ? "Next spread" : "Previous spread"}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="12 18 6 12 12 6" />
               <polyline points="19 18 13 12 19 6" />
             </svg>
           </button>
-          {/* 1-page prev */}
+          {/* ‹ single-chevron left */}
           <button
-            onClick={goPagePrev}
-            disabled={currentPage === 0}
+            onClick={rtl ? goPageNext : goPagePrev}
+            disabled={rtl ? currentPage >= total - 1 : currentPage === 0}
             className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/15 text-white/70 hover:text-white cursor-pointer transition-colors disabled:opacity-30 disabled:cursor-default"
-            title="Previous page"
+            title={rtl ? "Next page" : "Previous page"}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="15 18 9 12 15 6" />
@@ -246,23 +246,23 @@ export default function ComicViewer({ filePath, onClose }: ComicViewerProps) {
           <span className="text-white/60 text-xs font-mono min-w-[4em] text-center">
             {pageDisplay}
           </span>
-          {/* 1-page next */}
+          {/* › single-chevron right */}
           <button
-            onClick={goPageNext}
-            disabled={currentPage >= total - 1}
+            onClick={rtl ? goPagePrev : goPageNext}
+            disabled={rtl ? currentPage === 0 : currentPage >= total - 1}
             className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/15 text-white/70 hover:text-white cursor-pointer transition-colors disabled:opacity-30 disabled:cursor-default"
-            title="Next page"
+            title={rtl ? "Previous page" : "Next page"}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="9 6 15 12 9 18" />
             </svg>
           </button>
-          {/* Spread next */}
+          {/* » double-chevron right */}
           <button
-            onClick={goNext}
-            disabled={currentSpreadIndex >= spreads.length - 1}
+            onClick={rtl ? goPrev : goNext}
+            disabled={rtl ? currentSpreadIndex === 0 : currentSpreadIndex >= spreads.length - 1}
             className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/15 text-white/70 hover:text-white cursor-pointer transition-colors disabled:opacity-30 disabled:cursor-default"
-            title="Next spread"
+            title={rtl ? "Previous spread" : "Next spread"}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="5 6 11 12 5 18" />
