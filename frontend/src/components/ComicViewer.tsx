@@ -54,69 +54,36 @@ export default function ComicViewer({ filePath, onClose }: ComicViewerProps) {
     });
   }, []);
 
-  // Compute spread layout: array of [pageIndex] or [pageIndex, pageIndex]
-  const spreads = useMemo(() => {
-    if (!spreadMode || total === 0) {
-      return Array.from({ length: total }, (_, i) => [i]);
+  // Compute current spread dynamically from currentPage
+  const currentSpread = useMemo(() => {
+    if (!spreadMode || total === 0) return [currentPage];
+    if (landscapePages.has(currentPage)) return [currentPage];
+    if (currentPage + 1 < total && !landscapePages.has(currentPage + 1)) {
+      return [currentPage, currentPage + 1];
     }
+    return [currentPage];
+  }, [spreadMode, total, currentPage, landscapePages]);
 
-    const result: number[][] = [];
-    // First page (cover) is always alone
-    if (total > 0) {
-      result.push([0]);
-    }
+  // Spread size for spread-level navigation
+  const spreadSize = currentSpread.length;
 
-    let i = 1;
-    while (i < total) {
-      if (landscapePages.has(i)) {
-        result.push([i]);
-        i++;
-      } else if (i + 1 < total && !landscapePages.has(i + 1)) {
-        result.push([i, i + 1]);
-        i += 2;
-      } else {
-        result.push([i]);
-        i++;
-      }
-    }
-    return result;
-  }, [spreadMode, total, landscapePages]);
-
-  // Current spread index
-  const currentSpreadIndex = useMemo(() => {
-    for (let i = 0; i < spreads.length; i++) {
-      if (spreads[i].includes(currentPage)) return i;
-    }
-    return 0;
-  }, [spreads, currentPage]);
-
-  const currentSpread = spreads[currentSpreadIndex] || [0];
-
-  const goToSpread = useCallback((idx: number) => {
-    const clamped = Math.max(0, Math.min(idx, spreads.length - 1));
-    setCurrentPage(spreads[clamped][0]);
-  }, [spreads]);
-
+  // Spread-level navigation (skip by current spread size)
   const goPrev = useCallback(() => {
-    goToSpread(currentSpreadIndex - 1);
-  }, [currentSpreadIndex, goToSpread]);
+    setCurrentPage((p) => Math.max(0, p - spreadSize));
+  }, [spreadSize]);
 
   const goNext = useCallback(() => {
-    goToSpread(currentSpreadIndex + 1);
-  }, [currentSpreadIndex, goToSpread]);
+    setCurrentPage((p) => Math.min(total - 1, p + spreadSize));
+  }, [total, spreadSize]);
 
-  // 1-page navigation: in spread mode, shift the spread window by 1 page
+  // 1-page navigation
   const goPagePrev = useCallback(() => {
-    const curStart = currentSpread[0];
-    if (curStart <= 0) return;
-    setCurrentPage(curStart - 1);
-  }, [currentSpread]);
+    setCurrentPage((p) => Math.max(0, p - 1));
+  }, []);
 
   const goPageNext = useCallback(() => {
-    const curEnd = currentSpread[currentSpread.length - 1];
-    if (curEnd >= total - 1) return;
-    setCurrentPage(curEnd + 1);
-  }, [currentSpread, total]);
+    setCurrentPage((p) => Math.min(total - 1, p + 1));
+  }, [total]);
 
   // Navigation by click area: left/right edges navigate, center toggles toolbar
   const handleAreaClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
@@ -161,24 +128,28 @@ export default function ComicViewer({ filePath, onClose }: ComicViewerProps) {
   const prefetchRef = useRef<HTMLImageElement[]>([]);
   useEffect(() => {
     if (total === 0) return;
+    const lastPage = currentSpread[currentSpread.length - 1];
     const toPrefetch: number[] = [];
-    for (let s = currentSpreadIndex + 1; s <= Math.min(currentSpreadIndex + 2, spreads.length - 1); s++) {
-      toPrefetch.push(...spreads[s]);
+    for (let p = lastPage + 1; p <= Math.min(lastPage + 4, total - 1); p++) {
+      toPrefetch.push(p);
     }
     prefetchRef.current = toPrefetch.map((idx) => {
       const img = new Image();
       img.src = zipPageUrl(filePath, idx);
       return img;
     });
-  }, [currentSpreadIndex, spreads, filePath, total]);
+  }, [currentSpread, filePath, total]);
 
-  // Page display info
+  // Page display info — in RTL show higher page first (e.g. "4-3")
   const pageDisplay = useMemo(() => {
     if (currentSpread.length === 2) {
-      return `${currentSpread[0] + 1}-${currentSpread[1] + 1} / ${total}`;
+      const [a, b] = currentSpread;
+      return rtl
+        ? `${b + 1}-${a + 1} / ${total}`
+        : `${a + 1}-${b + 1} / ${total}`;
     }
     return `${currentSpread[0] + 1} / ${total}`;
-  }, [currentSpread, total]);
+  }, [currentSpread, total, rtl]);
 
   if (loading) {
     return (
@@ -227,7 +198,7 @@ export default function ComicViewer({ filePath, onClose }: ComicViewerProps) {
           {/* « double-chevron left */}
           <button
             onClick={rtl ? goNext : goPrev}
-            disabled={rtl ? currentSpreadIndex >= spreads.length - 1 : currentSpreadIndex === 0}
+            disabled={rtl ? currentPage + spreadSize >= total : currentPage - spreadSize < 0}
             className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/15 text-white/70 hover:text-white cursor-pointer transition-colors disabled:opacity-30 disabled:cursor-default"
             title={rtl ? "Next spread" : "Previous spread"}
           >
@@ -264,7 +235,7 @@ export default function ComicViewer({ filePath, onClose }: ComicViewerProps) {
           {/* » double-chevron right */}
           <button
             onClick={rtl ? goPrev : goNext}
-            disabled={rtl ? currentSpreadIndex === 0 : currentSpreadIndex >= spreads.length - 1}
+            disabled={rtl ? currentPage - spreadSize < 0 : currentPage + spreadSize >= total}
             className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/15 text-white/70 hover:text-white cursor-pointer transition-colors disabled:opacity-30 disabled:cursor-default"
             title={rtl ? "Previous spread" : "Next spread"}
           >
@@ -369,9 +340,9 @@ export default function ComicViewer({ filePath, onClose }: ComicViewerProps) {
         <input
           type="range"
           min={0}
-          max={spreads.length - 1}
-          value={currentSpreadIndex}
-          onChange={(e) => goToSpread(Number(e.target.value))}
+          max={total - 1}
+          value={currentPage}
+          onChange={(e) => setCurrentPage(Number(e.target.value))}
           className="w-full h-1.5 appearance-none bg-white/20 rounded-full cursor-pointer"
           style={{
             direction: rtl ? "rtl" : "ltr",
