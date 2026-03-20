@@ -219,7 +219,20 @@ export default function ComicViewer({ filePath, onClose }: ComicViewerProps) {
         </div>
 
         {/* Page navigation */}
-        <div className="flex items-center gap-1 flex-shrink-0">
+        <div className="flex items-center gap-0.5 flex-shrink-0">
+          {/* Spread prev */}
+          <button
+            onClick={goPrev}
+            disabled={currentSpreadIndex === 0}
+            className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/15 text-white/70 hover:text-white cursor-pointer transition-colors disabled:opacity-30 disabled:cursor-default"
+            title="Previous spread"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="12 18 6 12 12 6" />
+              <polyline points="19 18 13 12 19 6" />
+            </svg>
+          </button>
+          {/* 1-page prev */}
           <button
             onClick={goPagePrev}
             disabled={currentPage === 0}
@@ -233,6 +246,7 @@ export default function ComicViewer({ filePath, onClose }: ComicViewerProps) {
           <span className="text-white/60 text-xs font-mono min-w-[4em] text-center">
             {pageDisplay}
           </span>
+          {/* 1-page next */}
           <button
             onClick={goPageNext}
             disabled={currentPage >= total - 1}
@@ -241,6 +255,18 @@ export default function ComicViewer({ filePath, onClose }: ComicViewerProps) {
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="9 6 15 12 9 18" />
+            </svg>
+          </button>
+          {/* Spread next */}
+          <button
+            onClick={goNext}
+            disabled={currentSpreadIndex >= spreads.length - 1}
+            className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/15 text-white/70 hover:text-white cursor-pointer transition-colors disabled:opacity-30 disabled:cursor-default"
+            title="Next spread"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="5 6 11 12 5 18" />
+              <polyline points="12 6 18 12 12 18" />
             </svg>
           </button>
         </div>
