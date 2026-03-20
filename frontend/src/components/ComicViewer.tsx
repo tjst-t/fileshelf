@@ -14,7 +14,6 @@ export default function ComicViewer({ filePath, onClose }: ComicViewerProps) {
   const [rtl, setRtl] = useState(true);
   const [spreadMode, setSpreadMode] = useState(() => window.innerWidth >= 768);
   const [toolbarVisible, setToolbarVisible] = useState(true);
-  const toolbarTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [landscapePages, setLandscapePages] = useState<Set<number>>(new Set());
 
   // Filename for display
@@ -106,12 +105,14 @@ export default function ComicViewer({ filePath, onClose }: ComicViewerProps) {
     goToSpread(currentSpreadIndex + 1);
   }, [currentSpreadIndex, goToSpread]);
 
-  // Toolbar auto-hide
-  const showToolbar = useCallback(() => {
-    setToolbarVisible(true);
-    if (toolbarTimer.current) clearTimeout(toolbarTimer.current);
-    toolbarTimer.current = setTimeout(() => setToolbarVisible(false), 2000);
+  // 1-page navigation (useful in spread mode)
+  const goPagePrev = useCallback(() => {
+    setCurrentPage((p) => Math.max(0, p - 1));
   }, []);
+
+  const goPageNext = useCallback(() => {
+    setCurrentPage((p) => Math.min(total - 1, p + 1));
+  }, [total]);
 
   // Navigation by click area: left/right edges navigate, center toggles toolbar
   const handleAreaClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
@@ -127,14 +128,9 @@ export default function ComicViewer({ filePath, onClose }: ComicViewerProps) {
       if (rtl) goPrev(); else goNext();
     } else {
       // Center zone: toggle toolbar
-      if (toolbarVisible) {
-        if (toolbarTimer.current) clearTimeout(toolbarTimer.current);
-        setToolbarVisible(false);
-      } else {
-        showToolbar();
-      }
+      setToolbarVisible((v) => !v);
     }
-  }, [rtl, goNext, goPrev, showToolbar, toolbarVisible]);
+  }, [rtl, goNext, goPrev]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -155,12 +151,7 @@ export default function ComicViewer({ filePath, onClose }: ComicViewerProps) {
     return () => window.removeEventListener("keydown", handler, true);
   }, [onClose, goPrev, goNext, rtl]);
 
-  useEffect(() => {
-    showToolbar();
-    return () => {
-      if (toolbarTimer.current) clearTimeout(toolbarTimer.current);
-    };
-  }, [showToolbar]);
+
 
   // Prefetch next pages (hold refs to prevent GC from cancelling requests)
   const prefetchRef = useRef<HTMLImageElement[]>([]);
@@ -227,9 +218,31 @@ export default function ComicViewer({ filePath, onClose }: ComicViewerProps) {
           <div className="text-white text-sm font-medium truncate">{filename}</div>
         </div>
 
-        {/* Page counter */}
-        <div className="text-white/60 text-xs font-mono flex-shrink-0">
-          {pageDisplay}
+        {/* Page navigation */}
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <button
+            onClick={goPagePrev}
+            disabled={currentPage === 0}
+            className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/15 text-white/70 hover:text-white cursor-pointer transition-colors disabled:opacity-30 disabled:cursor-default"
+            title="Previous page"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+          </button>
+          <span className="text-white/60 text-xs font-mono min-w-[4em] text-center">
+            {pageDisplay}
+          </span>
+          <button
+            onClick={goPageNext}
+            disabled={currentPage >= total - 1}
+            className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/15 text-white/70 hover:text-white cursor-pointer transition-colors disabled:opacity-30 disabled:cursor-default"
+            title="Next page"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 6 15 12 9 18" />
+            </svg>
+          </button>
         </div>
 
         {/* Spread/Single toggle */}
