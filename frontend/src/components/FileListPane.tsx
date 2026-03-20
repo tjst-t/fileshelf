@@ -1048,12 +1048,12 @@ export default function FileListPane({
               ]).map((col, colIdx) => (
                 <th
                   key={col.key}
-                  className={`px-3 py-0 text-[11px] uppercase tracking-[0.05em] font-semibold select-none whitespace-nowrap border-b border-border cursor-pointer ${col.align} ${
+                  className={`p-0 text-[11px] uppercase tracking-[0.05em] font-semibold select-none whitespace-nowrap border-b border-border cursor-pointer ${
                     sortKey === col.key ? "text-text bg-accent/6" : "text-text-dim"
                   } hover:text-text`}
                   onClick={() => handleSort(col.key)}
                 >
-                  <div className="relative py-2">
+                  <div className={`relative px-3 py-2 ${col.align}`}>
                     {col.label}{sortIndicator(col.key)}
                     {colIdx < colWidths.length - 1 && (
                       <ColumnResizeHandle onResize={(dx) => handleColResize(colIdx, dx)} />
