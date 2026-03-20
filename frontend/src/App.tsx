@@ -52,6 +52,8 @@ export default function App() {
     clearClipboard,
     uploads,
     refreshKey,
+    fileListScrollRef,
+    pendingScrollRestore,
     searchQuery,
     searchResults,
     searchLoading,
@@ -371,6 +373,8 @@ export default function App() {
               currentPath={currentPath}
               loading={loading}
               clipboard={clipboard}
+              fileListScrollRef={fileListScrollRef}
+              pendingScrollRestore={pendingScrollRestore}
               onNavigate={handleNavigate}
               onSelect={toggleSelect}
               onSelectRange={selectRange}

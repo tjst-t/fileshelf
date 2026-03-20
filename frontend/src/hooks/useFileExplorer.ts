@@ -58,6 +58,9 @@ export function useFileExplorer() {
   const [uploads, setUploads] = useState<Map<string, UploadProgress>>(new Map());
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const isPopState = useRef(false);
+  const scrollPositions = useRef<Map<string, number>>(new Map());
+  const fileListScrollRef = useRef<HTMLDivElement | null>(null);
+  const pendingScrollRestore = useRef<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResultEntry[] | null>(null);
   const [searchLoading, setSearchLoading] = useState(false);
@@ -117,6 +120,11 @@ export function useFileExplorer() {
   }, []);
 
   const navigate = useCallback(async (path: string) => {
+    // Save current scroll position before navigating away
+    if (currentPathRef.current && fileListScrollRef.current) {
+      scrollPositions.current.set(currentPathRef.current, fileListScrollRef.current.scrollTop);
+    }
+
     // If leaving search mode, save search to history so the user can go back
     if (searchActiveRef.current && searchQueryRef.current && !isPopState.current) {
       window.history.pushState(null, "", SEARCH_HASH_PREFIX + encodeURIComponent(searchQueryRef.current));
@@ -148,6 +156,10 @@ export function useFileExplorer() {
       setCurrentPath(path);
       if (!isPopState.current) {
         window.history.pushState(null, "", "#" + encodeURIComponent(path));
+      }
+      // Schedule scroll restore for popstate navigation
+      if (isPopState.current) {
+        pendingScrollRestore.current = scrollPositions.current.get(path) ?? null;
       }
       isPopState.current = false;
     } catch (e) {
@@ -528,6 +540,8 @@ export function useFileExplorer() {
     searchQuery,
     searchResults,
     refreshKey,
+    fileListScrollRef,
+    pendingScrollRestore,
     searchLoading,
     handleSearch,
     clearSearch,

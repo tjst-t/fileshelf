@@ -32,6 +32,8 @@ interface FileListPaneProps {
   shares?: Share[];
   searchResults?: SearchResultEntry[] | null;
   searchLoading?: boolean;
+  fileListScrollRef?: React.RefObject<HTMLDivElement | null>;
+  pendingScrollRestore?: React.RefObject<number | null>;
 }
 
 type SortKey = "name" | "ext" | "size" | "modified" | "perms";
@@ -77,6 +79,46 @@ function fileIcon(entry: FileEntry): string {
   return icons[ext || ""] || "\u{1F4C4}";
 }
 
+function ColumnResizeHandle({ onResize }: { onResize: (delta: number) => void }) {
+  const dragging = useRef(false);
+  const startX = useRef(0);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    startX.current = e.clientX;
+    dragging.current = true;
+
+    const handleMouseMove = (ev: MouseEvent) => {
+      if (!dragging.current) return;
+      const delta = ev.clientX - startX.current;
+      startX.current = ev.clientX;
+      onResize(delta);
+    };
+
+    const handleMouseUp = () => {
+      dragging.current = false;
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }, [onResize]);
+
+  return (
+    <div
+      className="absolute top-0 right-0 w-[5px] h-full cursor-col-resize z-[3] hover:bg-accent/30 active:bg-accent/50"
+      onMouseDown={handleMouseDown}
+      onClick={(e) => e.stopPropagation()}
+    />
+  );
+}
+
 function triggerDownload(url: string) {
   const a = document.createElement("a");
   a.href = url;
@@ -110,6 +152,8 @@ export default function FileListPane({
   shares,
   searchResults,
   searchLoading,
+  fileListScrollRef,
+  pendingScrollRestore,
 }: FileListPaneProps) {
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
@@ -119,10 +163,52 @@ export default function FileListPane({
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
   const [dropTargetName, setDropTargetName] = useState<string | null>(null);
 
+  // Column widths (percentages)
+  const [colWidths, setColWidths] = useState([38, 8, 13, 22, 19]);
+
   // Lasso (rubber-band) selection state
   const [lasso, setLasso] = useState<{ startX: number; startY: number; endX: number; endY: number } | null>(null);
   const lassoActiveRef = useRef(false);
   const tableContainerRef = useRef<HTMLDivElement>(null);
+
+  // Sync tableContainerRef with external fileListScrollRef
+  const setTableContainerRef = useCallback((el: HTMLDivElement | null) => {
+    (tableContainerRef as React.RefObject<HTMLDivElement | null>).current = el;
+    if (fileListScrollRef) {
+      (fileListScrollRef as React.RefObject<HTMLDivElement | null>).current = el;
+    }
+  }, [fileListScrollRef]);
+
+  // Restore scroll position after entries load
+  useEffect(() => {
+    if (!pendingScrollRestore || pendingScrollRestore.current === null) return;
+    if (loading || !tableContainerRef.current) return;
+    const scrollTop = pendingScrollRestore.current;
+    (pendingScrollRestore as React.RefObject<number | null>).current = null;
+    requestAnimationFrame(() => {
+      if (tableContainerRef.current) {
+        tableContainerRef.current.scrollTop = scrollTop;
+      }
+    });
+  }, [loading, pendingScrollRestore]);
+
+  // Column resize handler
+  const handleColResize = useCallback((colIndex: number, deltaX: number) => {
+    if (!tableContainerRef.current) return;
+    const tableWidth = tableContainerRef.current.clientWidth;
+    if (tableWidth === 0) return;
+    const deltaPct = (deltaX / tableWidth) * 100;
+    setColWidths((prev) => {
+      const next = [...prev];
+      const minWidth = 3;
+      const newLeft = next[colIndex] + deltaPct;
+      const newRight = next[colIndex + 1] - deltaPct;
+      if (newLeft < minWidth || newRight < minWidth) return prev;
+      next[colIndex] = newLeft;
+      next[colIndex + 1] = newRight;
+      return next;
+    });
+  }, []);
 
   // Long-press for context menu on mobile
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -756,7 +842,7 @@ export default function FileListPane({
           </div>
         )}
 
-        <div ref={tableContainerRef} className="flex-1 overflow-auto">
+        <div ref={setTableContainerRef} className="flex-1 overflow-auto">
           {loading ? (
             <div className="py-8 text-center text-text-muted text-sm">Loading...</div>
           ) : sorted.length === 0 ? (
@@ -946,29 +1032,37 @@ export default function FileListPane({
 
       {/* Table */}
       <div
-        ref={tableContainerRef}
+        ref={setTableContainerRef}
         className="flex-1 overflow-auto"
         onContextMenu={handleBackgroundContextMenu}
         onMouseDown={handleLassoMouseDown}
       >
         <table className="w-full border-collapse table-fixed select-none">
+          <colgroup>
+            {colWidths.map((w, i) => (
+              <col key={i} style={{ width: `${w}%` }} />
+            ))}
+          </colgroup>
           <thead className="sticky top-0 bg-surface-alt z-[2]">
             <tr>
               {([
-                { key: "name" as SortKey, label: "Name", align: "text-left", width: "w-[38%]" },
-                { key: "ext" as SortKey, label: "Ext", align: "text-left", width: "w-[8%]" },
-                { key: "size" as SortKey, label: "Size", align: "text-right", width: "w-[13%]" },
-                { key: "modified" as SortKey, label: "Modified", align: "text-left", width: "w-[22%]" },
-                { key: "perms" as SortKey, label: "Perms", align: "text-left", width: "w-[19%]" },
-              ]).map((col) => (
+                { key: "name" as SortKey, label: "Name", align: "text-left" },
+                { key: "ext" as SortKey, label: "Ext", align: "text-left" },
+                { key: "size" as SortKey, label: "Size", align: "text-right" },
+                { key: "modified" as SortKey, label: "Modified", align: "text-left" },
+                { key: "perms" as SortKey, label: "Perms", align: "text-left" },
+              ]).map((col, colIdx) => (
                 <th
                   key={col.key}
-                  className={`px-3 py-2 text-[11px] uppercase tracking-[0.05em] font-semibold select-none whitespace-nowrap border-b border-border cursor-pointer ${col.align} ${col.width} ${
+                  className={`relative px-3 py-2 text-[11px] uppercase tracking-[0.05em] font-semibold select-none whitespace-nowrap border-b border-border cursor-pointer ${col.align} ${
                     sortKey === col.key ? "text-text bg-accent/6" : "text-text-dim"
                   } hover:text-text`}
                   onClick={() => handleSort(col.key)}
                 >
                   {col.label}{sortIndicator(col.key)}
+                  {colIdx < colWidths.length - 1 && (
+                    <ColumnResizeHandle onResize={(dx) => handleColResize(colIdx, dx)} />
+                  )}
                 </th>
               ))}
             </tr>
