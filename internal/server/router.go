@@ -34,6 +34,7 @@ func NewRouter(cfg *config.Config, fop fileop.FileOperator) http.Handler {
 
 	// API routes
 	apiMux := http.NewServeMux()
+	apiMux.HandleFunc("GET /api/me", h.HandleMe)
 	apiMux.HandleFunc("GET /api/shares", h.HandleShares)
 	apiMux.HandleFunc("GET /api/files", h.HandleFilesList)
 	apiMux.HandleFunc("GET /api/files/stat", h.HandleFilesStat)

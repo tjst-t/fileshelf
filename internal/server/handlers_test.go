@@ -483,9 +483,39 @@ func TestResolvePath(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got := h.resolvePath(tt.virtual)
+		got := h.resolvePath(tt.virtual, "testuser")
 		if got != tt.want {
 			t.Errorf("resolvePath(%q)=%q, want %q", tt.virtual, got, tt.want)
+		}
+	}
+}
+
+func TestResolvePathWithUserPlaceholder(t *testing.T) {
+	cfg := &config.Config{
+		Server: config.ServerConfig{DevMode: true, DevUser: "testuser"},
+		Shares: []config.Share{
+			{Name: "home", Path: "/tank/homes/%u"},
+			{Name: "media", Path: "/tank/media"},
+		},
+	}
+	h := &Handlers{Config: cfg}
+
+	tests := []struct {
+		virtual  string
+		username string
+		want     string
+	}{
+		{"/home", "alice", "/tank/homes/alice"},
+		{"/home/docs", "alice", "/tank/homes/alice/docs"},
+		{"/home", "bob", "/tank/homes/bob"},
+		{"/home/music/song.mp3", "bob", "/tank/homes/bob/music/song.mp3"},
+		{"/media/movies", "alice", "/tank/media/movies"},
+	}
+
+	for _, tt := range tests {
+		got := h.resolvePath(tt.virtual, tt.username)
+		if got != tt.want {
+			t.Errorf("resolvePath(%q, %q)=%q, want %q", tt.virtual, tt.username, got, tt.want)
 		}
 	}
 }

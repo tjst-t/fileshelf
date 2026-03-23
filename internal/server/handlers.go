@@ -36,6 +36,19 @@ func (h *Handlers) HandleVersion(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// HandleMe returns the current authenticated user's info.
+func (h *Handlers) HandleMe(w http.ResponseWriter, r *http.Request) {
+	user := UserFromContext(r.Context())
+	if user == nil {
+		writeJSONError(w, "not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	writeJSON(w, map[string]string{
+		"username": user.Username,
+	})
+}
+
 // HandleShares returns the list of shares accessible by the current user.
 func (h *Handlers) HandleShares(w http.ResponseWriter, r *http.Request) {
 	user := UserFromContext(r.Context())
@@ -51,8 +64,9 @@ func (h *Handlers) HandleShares(w http.ResponseWriter, r *http.Request) {
 
 	var accessible []shareInfo
 	for _, s := range h.Config.Shares {
-		if err := h.FileOp.Access(r.Context(), *user, s.Path); err == nil {
-			accessible = append(accessible, shareInfo{Name: s.Name, Path: s.Path})
+		sharePath := s.ExpandPath(user.Username)
+		if err := h.FileOp.Access(r.Context(), *user, sharePath); err == nil {
+			accessible = append(accessible, shareInfo{Name: s.Name, Path: sharePath})
 		}
 	}
 
@@ -77,7 +91,7 @@ func (h *Handlers) HandleFilesList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	absPath := h.resolvePath(path)
+	absPath := h.resolvePath(path, user.Username)
 
 	entries, err := h.FileOp.List(r.Context(), *user, absPath)
 	if err != nil {
@@ -102,7 +116,7 @@ func (h *Handlers) HandleFilesStat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	absPath := h.resolvePath(path)
+	absPath := h.resolvePath(path, user.Username)
 
 	entry, err := h.FileOp.Stat(r.Context(), *user, absPath)
 	if err != nil {
@@ -127,7 +141,7 @@ func (h *Handlers) HandleFilesDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	absPath := h.resolvePath(path)
+	absPath := h.resolvePath(path, user.Username)
 
 	rc, err := h.FileOp.Read(r.Context(), *user, absPath)
 	if err != nil {
@@ -162,7 +176,7 @@ func (h *Handlers) HandleFilesPreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	absPath := h.resolvePath(path)
+	absPath := h.resolvePath(path, user.Username)
 
 	ct := mime.TypeByExtension(filepath.Ext(absPath))
 	if ct == "" {
@@ -300,7 +314,7 @@ func (h *Handlers) HandleFilesUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	absPath := h.resolvePath(path)
+	absPath := h.resolvePath(path, user.Username)
 
 	if err := h.FileOp.Write(r.Context(), *user, absPath, r.Body); err != nil {
 		writeHelperError(w, err)
@@ -331,7 +345,7 @@ func (h *Handlers) HandleFilesMkdir(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	absPath := h.resolvePath(body.Path)
+	absPath := h.resolvePath(body.Path, user.Username)
 
 	var err error
 	if body.Recursive {
@@ -361,7 +375,7 @@ func (h *Handlers) HandleFilesDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	absPath := h.resolvePath(path)
+	absPath := h.resolvePath(path, user.Username)
 
 	if err := h.FileOp.Delete(r.Context(), *user, absPath); err != nil {
 		writeHelperError(w, err)
@@ -392,8 +406,8 @@ func (h *Handlers) HandleFilesRename(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	absPath := h.resolvePath(body.Path)
-	absDest := h.resolvePath(body.Dest)
+	absPath := h.resolvePath(body.Path, user.Username)
+	absDest := h.resolvePath(body.Dest, user.Username)
 
 	if err := h.FileOp.Rename(r.Context(), *user, absPath, absDest); err != nil {
 		writeHelperError(w, err)
@@ -424,8 +438,8 @@ func (h *Handlers) HandleFilesCopy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	absPath := h.resolvePath(body.Path)
-	absDest := h.resolvePath(body.Dest)
+	absPath := h.resolvePath(body.Path, user.Username)
+	absDest := h.resolvePath(body.Dest, user.Username)
 
 	if err := h.FileOp.Copy(r.Context(), *user, absPath, absDest); err != nil {
 		writeHelperError(w, err)
@@ -476,7 +490,7 @@ func (h *Handlers) HandleFilesDownloadZip(w http.ResponseWriter, r *http.Request
 			continue
 		}
 
-		absPath := h.resolvePath(p)
+		absPath := h.resolvePath(p, user.Username)
 		entry, err := h.FileOp.Stat(r.Context(), *user, absPath)
 		if err != nil {
 			// Skip files we can't stat
@@ -688,7 +702,7 @@ func (h *Handlers) HandleZipPages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	absPath := h.resolvePath(path)
+	absPath := h.resolvePath(path, user.Username)
 
 	cached, err := h.getZipPages(r.Context(), *user, absPath)
 	if err != nil {
@@ -734,7 +748,7 @@ func (h *Handlers) HandleZipPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	absPath := h.resolvePath(path)
+	absPath := h.resolvePath(path, user.Username)
 
 	cached, err := h.getZipPages(r.Context(), *user, absPath)
 	if err != nil {
@@ -823,7 +837,7 @@ func (h *Handlers) HandleFilesSearch(w http.ResponseWriter, r *http.Request) {
 
 	if scopePath != "" {
 		// Scoped search: search within a specific directory
-		absPath := h.resolvePath(scopePath)
+		absPath := h.resolvePath(scopePath, user.Username)
 		virtualDir := filepath.Clean("/" + scopePath)
 
 		results, err := h.FileOp.Search(r.Context(), *user, absPath, query, maxResults)
@@ -847,16 +861,21 @@ func (h *Handlers) HandleFilesSearch(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		// Global search: search all accessible shares concurrently
-		var accessibleShares []config.Share
+		type accessibleShare struct {
+			Name string
+			Path string
+		}
+		var accessibleShares []accessibleShare
 		for _, s := range h.Config.Shares {
-			if err := h.FileOp.Access(r.Context(), *user, s.Path); err == nil {
-				accessibleShares = append(accessibleShares, s)
+			sharePath := s.ExpandPath(user.Username)
+			if err := h.FileOp.Access(r.Context(), *user, sharePath); err == nil {
+				accessibleShares = append(accessibleShares, accessibleShare{Name: s.Name, Path: sharePath})
 			}
 		}
 
 		ch := make(chan shareResult, len(accessibleShares))
 		for _, s := range accessibleShares {
-			go func(s config.Share) {
+			go func(s accessibleShare) {
 				results, err := h.FileOp.Search(r.Context(), *user, s.Path, query, maxResults)
 				ch <- shareResult{shareName: s.Name, results: results, err: err}
 			}(s)
@@ -902,7 +921,8 @@ func (h *Handlers) HandleFilesSearch(w http.ResponseWriter, r *http.Request) {
 
 // resolvePath converts a virtual path like "/media/movies" to the real filesystem path.
 // Virtual paths start with the share name as the first component.
-func (h *Handlers) resolvePath(virtualPath string) string {
+// The username is used to expand %u placeholders in share paths.
+func (h *Handlers) resolvePath(virtualPath, username string) string {
 	// Clean the path
 	virtualPath = filepath.Clean("/" + virtualPath)
 
@@ -915,10 +935,11 @@ func (h *Handlers) resolvePath(virtualPath string) string {
 	shareName := parts[0]
 	for _, s := range h.Config.Shares {
 		if s.Name == shareName {
+			sharePath := s.ExpandPath(username)
 			if len(parts) == 1 {
-				return s.Path
+				return sharePath
 			}
-			return filepath.Join(s.Path, parts[1])
+			return filepath.Join(sharePath, parts[1])
 		}
 	}
 

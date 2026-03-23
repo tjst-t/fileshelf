@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef, lazy, Suspense } from "react";
 import type { FileEntry } from "./api/client";
-import { fetchVersion } from "./api/client";
+import { fetchVersion, fetchMe } from "./api/client";
 import { useFileExplorer } from "./hooks/useFileExplorer";
 import { useTheme } from "./hooks/useTheme";
 import { useIsMobile, useIsTablet } from "./hooks/useMediaQuery";
@@ -62,9 +62,11 @@ export default function App() {
   } = useFileExplorer();
 
   const [version, setVersion] = useState("");
+  const [username, setUsername] = useState("");
 
   useEffect(() => {
     fetchVersion().then((v) => setVersion(v.version)).catch(() => {});
+    fetchMe().then((me) => setUsername(me.username)).catch(() => {});
   }, []);
 
   const [showPreview, setShowPreview] = useState(false);
@@ -294,7 +296,7 @@ export default function App() {
 
       {/* Title bar */}
       <TitleBar
-        username="tjstkm"
+        username={username}
         theme={theme}
         onToggleTheme={toggleTheme}
         onToggleDrawer={() => setDrawerOpen((o) => !o)}

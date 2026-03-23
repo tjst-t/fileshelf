@@ -33,6 +33,15 @@ async function handleResponse<T>(res: Response): Promise<T> {
   return res.json();
 }
 
+export interface MeInfo {
+  username: string;
+}
+
+export async function fetchMe(): Promise<MeInfo> {
+  const res = await fetch("/api/me");
+  return handleResponse<MeInfo>(res);
+}
+
 export async function fetchShares(): Promise<Share[]> {
   const res = await fetch("/api/shares");
   return handleResponse<Share[]>(res);

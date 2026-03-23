@@ -142,3 +142,50 @@ func TestShareBasePaths(t *testing.T) {
 		t.Errorf("unexpected base paths: %v", paths)
 	}
 }
+
+func TestShareBasePathsWithUserPlaceholder(t *testing.T) {
+	cfg := &Config{
+		Shares: []Share{
+			{Name: "home", Path: "/tank/homes/%u"},
+			{Name: "media", Path: "/tank/media"},
+		},
+	}
+	paths := cfg.ShareBasePaths()
+	if len(paths) != 2 {
+		t.Fatalf("expected 2 paths, got %d", len(paths))
+	}
+	if paths[0] != "/tank/homes" {
+		t.Errorf("base path[0]=%q, want %q", paths[0], "/tank/homes")
+	}
+	if paths[1] != "/tank/media" {
+		t.Errorf("base path[1]=%q, want %q", paths[1], "/tank/media")
+	}
+}
+
+func TestShareExpandPath(t *testing.T) {
+	tests := []struct {
+		path     string
+		username string
+		want     string
+	}{
+		{"/tank/homes/%u", "alice", "/tank/homes/alice"},
+		{"/tank/media", "alice", "/tank/media"},
+		{"/tank/%u/data", "bob", "/tank/bob/data"},
+	}
+	for _, tt := range tests {
+		s := Share{Name: "test", Path: tt.path}
+		got := s.ExpandPath(tt.username)
+		if got != tt.want {
+			t.Errorf("ExpandPath(%q, %q)=%q, want %q", tt.path, tt.username, got, tt.want)
+		}
+	}
+}
+
+func TestShareHasUserPlaceholder(t *testing.T) {
+	if !(Share{Path: "/tank/homes/%u"}).HasUserPlaceholder() {
+		t.Error("expected true for path with %u")
+	}
+	if (Share{Path: "/tank/media"}).HasUserPlaceholder() {
+		t.Error("expected false for path without %u")
+	}
+}

@@ -3,6 +3,8 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -33,6 +35,16 @@ type HelperConfig struct {
 type Share struct {
 	Name string `yaml:"name"`
 	Path string `yaml:"path"`
+}
+
+// HasUserPlaceholder returns true if the share path contains %u.
+func (s Share) HasUserPlaceholder() bool {
+	return strings.Contains(s.Path, "%u")
+}
+
+// ExpandPath returns the share path with %u replaced by the given username.
+func (s Share) ExpandPath(username string) string {
+	return strings.ReplaceAll(s.Path, "%u", username)
 }
 
 // Load reads and parses a YAML config file.
@@ -97,10 +109,17 @@ func (c *Config) Validate() error {
 }
 
 // ShareBasePaths returns all share paths for use as base path validation.
+// For shares containing %u, the parent directory of the %u component is used
+// so that any expanded user path passes validation.
 func (c *Config) ShareBasePaths() []string {
 	paths := make([]string, len(c.Shares))
 	for i, s := range c.Shares {
-		paths[i] = s.Path
+		if s.HasUserPlaceholder() {
+			idx := strings.Index(s.Path, "%u")
+			paths[i] = filepath.Clean(s.Path[:idx])
+		} else {
+			paths[i] = s.Path
+		}
 	}
 	return paths
 }
