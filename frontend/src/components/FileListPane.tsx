@@ -79,40 +79,6 @@ function fileIcon(entry: FileEntry): string {
   return icons[ext || ""] || "\u{1F4C4}";
 }
 
-function ColumnResizeHandle({ onResize }: { onResize: (delta: number) => void }) {
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    let startX = e.clientX;
-
-    const handleMouseMove = (ev: MouseEvent) => {
-      const delta = ev.clientX - startX;
-      startX = ev.clientX;
-      onResize(delta);
-    };
-
-    const handleMouseUp = () => {
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    };
-
-    document.addEventListener("mousemove", handleMouseMove);
-    document.addEventListener("mouseup", handleMouseUp);
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-  }, [onResize]);
-
-  return (
-    <div
-      className="absolute top-0 right-[-2px] w-[5px] h-full cursor-col-resize z-[3] border-r border-border/40 hover:border-accent/60 hover:bg-accent/20 active:bg-accent/40"
-      onMouseDown={handleMouseDown}
-      onClick={(e) => e.stopPropagation()}
-    />
-  );
-}
-
 function triggerDownload(url: string) {
   const a = document.createElement("a");
   a.href = url;
@@ -157,9 +123,6 @@ export default function FileListPane({
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
   const [dropTargetName, setDropTargetName] = useState<string | null>(null);
 
-  // Column widths (percentages)
-  const [colWidths, setColWidths] = useState([38, 8, 13, 22, 19]);
-
   // Lasso (rubber-band) selection state
   const [lasso, setLasso] = useState<{ startX: number; startY: number; endX: number; endY: number } | null>(null);
   const lassoActiveRef = useRef(false);
@@ -185,24 +148,6 @@ export default function FileListPane({
       }
     });
   }, [loading, pendingScrollRestore]);
-
-  // Column resize handler
-  const handleColResize = useCallback((colIndex: number, deltaX: number) => {
-    if (!tableContainerRef.current) return;
-    const tableWidth = tableContainerRef.current.clientWidth;
-    if (tableWidth === 0) return;
-    const deltaPct = (deltaX / tableWidth) * 100;
-    setColWidths((prev) => {
-      const next = [...prev];
-      const minWidth = 3;
-      const newLeft = next[colIndex] + deltaPct;
-      const newRight = next[colIndex + 1] - deltaPct;
-      if (newLeft < minWidth || newRight < minWidth) return prev;
-      next[colIndex] = newLeft;
-      next[colIndex + 1] = newRight;
-      return next;
-    });
-  }, []);
 
   // Long-press for context menu on mobile
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1031,11 +976,13 @@ export default function FileListPane({
         onContextMenu={handleBackgroundContextMenu}
         onMouseDown={handleLassoMouseDown}
       >
-        <table className="w-full table-fixed select-none" style={{ borderSpacing: 0 }}>
+        <table className="w-full table-auto select-none" style={{ borderSpacing: 0 }}>
           <colgroup>
-            {colWidths.map((w, i) => (
-              <col key={i} style={{ width: `${w}%` }} />
-            ))}
+            <col style={{ width: "100%" }} />
+            <col />
+            <col />
+            <col />
+            <col />
           </colgroup>
           <thead className="sticky top-0 bg-surface-alt z-[2]">
             <tr>
@@ -1045,7 +992,7 @@ export default function FileListPane({
                 { key: "size" as SortKey, label: "Size" },
                 { key: "modified" as SortKey, label: "Modified" },
                 { key: "perms" as SortKey, label: "Perms" },
-              ]).map((col, colIdx) => (
+              ]).map((col) => (
                 <th
                   key={col.key}
                   className={`p-0 text-[11px] uppercase tracking-[0.05em] font-semibold select-none whitespace-nowrap border-b border-border cursor-pointer ${
@@ -1055,9 +1002,6 @@ export default function FileListPane({
                 >
                   <div className="relative px-3 py-2 text-left">
                     {col.label}{sortIndicator(col.key)}
-                    {colIdx < colWidths.length - 1 && (
-                      <ColumnResizeHandle onResize={(dx) => handleColResize(colIdx, dx)} />
-                    )}
                   </div>
                 </th>
               ))}
@@ -1131,16 +1075,16 @@ export default function FileListPane({
                         )}
                       </div>
                     </td>
-                    <td className="px-3 py-1.5 text-text-dim font-mono text-xs truncate">
+                    <td className="px-3 py-1.5 text-text-dim font-mono text-xs whitespace-nowrap">
                       {entry.type === "dir" ? "" : getExt(entry.name)}
                     </td>
-                    <td className="px-3 py-1.5 text-right text-text-dim font-mono text-xs">
+                    <td className="px-3 py-1.5 text-right text-text-dim font-mono text-xs whitespace-nowrap">
                       {entry.type === "dir" ? "\u2014" : formatSize(entry.size)}
                     </td>
-                    <td className="px-3 py-1.5 text-text-dim font-mono text-xs">
+                    <td className="px-3 py-1.5 text-text-dim font-mono text-xs whitespace-nowrap">
                       {formatDate(entry.modified)}
                     </td>
-                    <td className="px-3 py-1.5 text-text-faint font-mono text-xs">
+                    <td className="px-3 py-1.5 text-text-faint font-mono text-xs whitespace-nowrap">
                       {entry.perms}
                     </td>
                   </tr>
@@ -1156,10 +1100,10 @@ export default function FileListPane({
                           <span className="truncate text-text">{u.name}</span>
                         </div>
                       </td>
-                      <td className="px-3 py-1.5 text-text-dim font-mono text-xs truncate">
+                      <td className="px-3 py-1.5 text-text-dim font-mono text-xs whitespace-nowrap">
                         {getExt(u.name)}
                       </td>
-                      <td className="px-3 py-1.5 text-right text-xs">
+                      <td className="px-3 py-1.5 text-right text-xs whitespace-nowrap">
                         {u.status === "error" ? (
                           <span className="text-danger">{u.error}</span>
                         ) : (
@@ -1174,10 +1118,10 @@ export default function FileListPane({
                           </div>
                         )}
                       </td>
-                      <td className="px-3 py-1.5 text-text-dim font-mono text-xs">
+                      <td className="px-3 py-1.5 text-text-dim font-mono text-xs whitespace-nowrap">
                         {u.status === "uploading" ? "Uploading..." : u.status === "done" ? "Done" : "Error"}
                       </td>
-                      <td className="px-3 py-1.5">
+                      <td className="px-3 py-1.5 whitespace-nowrap">
                         {u.status === "uploading" && u.abort && (
                           <button
                             className="w-6 h-6 flex items-center justify-center rounded text-text-dim hover:text-danger cursor-pointer transition-colors"
