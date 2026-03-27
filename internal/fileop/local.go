@@ -2,10 +2,13 @@ package fileop
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
+	"os/user"
 	"path/filepath"
 	"sort"
+	"syscall"
 
 	"github.com/tjst-t/fileshelf/internal/helper"
 	"golang.org/x/sys/unix"
@@ -39,12 +42,15 @@ func (l *LocalFileOperator) List(_ context.Context, _ User, path string) ([]Entr
 		if de.IsDir() {
 			typ = "dir"
 		}
+		owner, group := resolveOwnerGroup(info)
 		entries = append(entries, Entry{
 			Name:     de.Name(),
 			Type:     typ,
 			Size:     info.Size(),
 			Modified: info.ModTime(),
 			Perms:    info.Mode().Perm().String(),
+			Owner:    owner,
+			Group:    group,
 		})
 	}
 
@@ -140,12 +146,15 @@ func (l *LocalFileOperator) Stat(_ context.Context, _ User, path string) (*Entry
 	if info.IsDir() {
 		typ = "dir"
 	}
+	owner, group := resolveOwnerGroup(info)
 	return &Entry{
 		Name:     info.Name(),
 		Type:     typ,
 		Size:     info.Size(),
 		Modified: info.ModTime(),
 		Perms:    info.Mode().Perm().String(),
+		Owner:    owner,
+		Group:    group,
 	}, nil
 }
 
@@ -163,10 +172,34 @@ func (l *LocalFileOperator) Search(_ context.Context, _ User, basePath string, q
 			Size:     e.Size,
 			Modified: e.Modified,
 			Perms:    e.Perms,
+			Owner:    e.Owner,
+			Group:    e.Group,
 			Dir:      e.Dir,
 		}
 	}
 	return results, nil
+}
+
+func resolveOwnerGroup(info os.FileInfo) (string, string) {
+	sys, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return "", ""
+	}
+
+	uid := fmt.Sprintf("%d", sys.Uid)
+	gid := fmt.Sprintf("%d", sys.Gid)
+
+	owner := uid
+	if u, err := user.LookupId(uid); err == nil {
+		owner = u.Username
+	}
+
+	group := gid
+	if g, err := user.LookupGroupId(gid); err == nil {
+		group = g.Name
+	}
+
+	return owner, group
 }
 
 func copyFile(src, dst string) error {
