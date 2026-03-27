@@ -486,7 +486,7 @@ export default function FileListPane({
     const thClass = "px-3 py-2 text-[11px] uppercase tracking-[0.05em] font-semibold select-none whitespace-nowrap border-b border-border text-text-dim";
 
     const toFileEntry = (r: SearchResultEntry): FileEntry => ({
-      name: r.name, type: r.type, size: r.size, modified: r.modified, perms: r.perms,
+      name: r.name, type: r.type, size: r.size, modified: r.modified, perms: r.perms, owner: r.owner, group: r.group,
     });
 
     const handleSearchDoubleClick = (result: SearchResultEntry) => {
@@ -665,7 +665,7 @@ export default function FileListPane({
                     >
                       <td className="px-3 py-1.5 text-[13px]">
                         <div className="flex items-center gap-2 overflow-hidden">
-                          <span className="flex-shrink-0 text-[15px]">{fileIcon({ ...result, modified: result.modified } as FileEntry)}</span>
+                          <span className="flex-shrink-0 text-[15px]">{fileIcon(toFileEntry(result))}</span>
                           <span className={`truncate ${result.type === "dir" ? "text-accent" : "text-text"}`}>
                             {result.name}
                           </span>
@@ -1084,8 +1084,9 @@ export default function FileListPane({
                     <td className="px-3 py-1.5 text-text-dim font-mono text-xs whitespace-nowrap">
                       {formatDate(entry.modified)}
                     </td>
-                    <td className="px-3 py-1.5 text-text-faint font-mono text-xs whitespace-nowrap">
-                      {entry.perms}
+                    <td className="px-3 py-1.5 font-mono text-xs whitespace-nowrap">
+                      <div className="text-text-dim">{entry.owner}:{entry.group}</div>
+                      <div className="text-text-faint">{entry.perms}</div>
                     </td>
                   </tr>
                 );

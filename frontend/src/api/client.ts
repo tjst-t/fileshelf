@@ -19,6 +19,8 @@ export interface FileEntry {
   size: number;
   modified: string;
   perms: string;
+  owner: string;
+  group: string;
 }
 
 export interface ApiError {
@@ -127,6 +129,8 @@ export interface SearchResultEntry {
   size: number;
   modified: string;
   perms: string;
+  owner: string;
+  group: string;
   dir: string; // virtual directory path, e.g. "/media/movies/action"
 }
 

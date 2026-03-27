@@ -96,6 +96,7 @@ export default function PreviewPane({ entry, selectedEntries, currentPath, onClo
     ["Path", "/" + filePath.replace(/^\/+/, "")],
     ["Size", formatSize(entry.size)],
     ["Modified", entry.modified ? formatDateLong(entry.modified) : "\u2014"],
+    ["Owner", `${entry.owner}:${entry.group}`],
     ["Permissions", entry.perms],
     ["Type", ext],
   ];

@@ -9,6 +9,8 @@ type Entry struct {
 	Size     int64     `json:"size"`
 	Modified time.Time `json:"modified"`
 	Perms    string    `json:"perms"`
+	Owner    string    `json:"owner"`
+	Group    string    `json:"group"`
 }
 
 // ErrorResponse is written to stdout on failure.

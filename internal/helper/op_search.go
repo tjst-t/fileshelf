@@ -14,6 +14,8 @@ type SearchEntry struct {
 	Size     int64  `json:"size"`
 	Modified string `json:"modified"`
 	Perms    string `json:"perms"`
+	Owner    string `json:"owner"`
+	Group    string `json:"group"`
 	Dir      string `json:"dir"` // relative directory path from basePath
 }
 
@@ -69,12 +71,15 @@ func OpSearch(basePath string, query string, maxResults int) (*SearchResponse, e
 			rel = ""
 		}
 
+		owner, group := resolveOwnerGroup(info)
 		results = append(results, SearchEntry{
 			Name:     name,
 			Type:     typ,
 			Size:     info.Size(),
 			Modified: info.ModTime().UTC().Format("2006-01-02T15:04:05Z"),
 			Perms:    info.Mode().Perm().String(),
+			Owner:    owner,
+			Group:    group,
 			Dir:      rel,
 		})
 
