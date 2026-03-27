@@ -13,7 +13,7 @@ export default function ComicViewer({ filePath, onClose }: ComicViewerProps) {
   const [currentPage, setCurrentPage] = useState(0);
   const [rtl, setRtl] = useState(true);
   const [spreadMode, setSpreadMode] = useState(() => window.innerWidth >= 768);
-  const [toolbarVisible, setToolbarVisible] = useState(true);
+  const [toolbarVisible, setToolbarVisible] = useState(false);
   const [landscapePages, setLandscapePages] = useState<Set<number>>(new Set());
 
   // Filename for display
